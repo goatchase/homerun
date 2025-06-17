@@ -15,51 +15,30 @@
       margin-bottom: 10px;
     }
     table {
-      border-collapse: separate;
-      border-spacing: 0;
+      border-collapse: collapse;
       width: 100%;
       background: white;
-      table-layout: fixed;
     }
     thead th {
       position: sticky;
       top: 0;
       background: #f0f0f0;
-      cursor: pointer;
       border-bottom: 2px solid #ccc;
       padding: 6px 8px;
-      user-select: none;
       text-align: left;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
     tbody tr {
       border-bottom: 1px solid #ddd;
     }
-    tbody tr:last-child {
-      border-bottom: none;
-    }
     th, td {
       padding: 6px 8px;
-      overflow: hidden;
       white-space: nowrap;
+      overflow: hidden;
       text-overflow: ellipsis;
-      border-left: none !important;
-      border-right: none !important;
     }
-    /* Left align text columns */
-    .text-left {
-      text-align: left;
-      padding-left: 12px;
-    }
-    /* Right align numeric columns */
     .text-right {
       text-align: right;
-      padding-right: 12px;
-      font-feature-settings: "tnum";
     }
-    /* Loading and error styles */
     #status {
       margin-top: 10px;
       font-style: italic;
@@ -75,139 +54,89 @@
   <table id="lineup-table" aria-label="MLB Lineups Table">
     <thead>
       <tr>
-        <th data-type="string">Batter Name</th>
-        <th data-type="string">Team</th>
-        <th data-type="string">Opponent</th>
-        <th data-type="string">Opposing Pitcher</th>
-        <th data-type="string">Ballpark</th>
-        <th data-type="number">Temperature</th>
-        <th data-type="string">Wind</th>
-        <th data-type="number">Humidity</th>
-        <th data-type="number">Batter HR/PA</th>
-        <th data-type="number">Pitcher HR/PA</th>
-        <th data-type="number">PA Since Last HR</th>
-        <th data-type="number">DraftKings Odds</th>
+        <th>Batter Name</th>
+        <th>Team</th>
+        <th>Opponent</th>
+        <th>Position</th>
+        <th>Opposing Pitcher</th>
+        <th>Ballpark</th>
+        <th class="text-right">Temperature</th>
+        <th>Wind</th>
+        <th class="text-right">Humidity</th>
       </tr>
     </thead>
     <tbody>
-      <!-- Data rows inserted here -->
+      <!-- Data will be inserted here -->
     </tbody>
   </table>
 
-<script>
-  const API_KEY = "efac23180b2f43259ccbe52c75da0a0c"; // Your SportsDataIO API key
-  const PROXY_URL = "http://localhost:8080/"; // Your local CORS proxy
+  <script>
+    const API_KEY = "efac23180b2f43259ccbe52c75da0a0c"; // your SportsDataIO key
+    const PROXY_URL = "http://localhost:8080/"; // your local proxy
+    const tbody = document.querySelector("#lineup-table tbody");
+    const statusDiv = document.getElementById("status");
 
-  const tbody = document.querySelector("#lineup-table tbody");
-  const statusDiv = document.getElementById("status");
-
-  function formatNumber(num, digits=3) {
-    return (num === null || num === undefined) ? "–" : Number(num).toFixed(digits);
-  }
-
-  function getTodayDate() {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  async function fetchLineupsForToday() {
-    statusDiv.textContent = "Loading lineups...";
-    const date = "2023-06-01";  // example known game day in the past getTodayDate();
-    const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
-
-    try {
-      const res = await fetch(apiUrl, {
-        headers: { "Ocp-Apim-Subscription-Key": API_KEY }
-      });
-
-      if (!res.ok) {
-        throw new Error(`API error: ${res.status} ${res.statusText}`);
-      }
-
-      const data = await res.json();
-
-      if (!Array.isArray(data) || data.length === 0) {
-        statusDiv.textContent = "No lineup data available for today.";
-        tbody.innerHTML = "";
-        return;
-      }
-
-      statusDiv.textContent = `Showing ${data.length} lineup entries for ${date}.`;
-      insertRows(data);
-
-    } catch (err) {
-      statusDiv.textContent = `Failed to load lineups: ${err.message}`;
-      tbody.innerHTML = "";
-      console.error(err);
+    function getTodayDate() {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
     }
-  }
 
-  function insertRows(data) {
-    tbody.innerHTML = "";
-    data.forEach(item => {
-      tbody.insertAdjacentHTML("beforeend", `
-        <tr>
-          <td class="text-left">${item.Name ?? "–"}</td>
-          <td class="text-left">${item.Team ?? "–"}</td>
-          <td class="text-left">${item.Opponent ?? "–"}</td>
-          <td class="text-left">${item.OpposingPitcher ?? "–"}</td>
-          <td class="text-left">${item.Ballpark ?? "–"}</td>
-          <td class="text-right">${item.Temperature ?? "–"}</td>
-          <td class="text-left">${item.Wind ?? "–"}</td>
-          <td class="text-right">${item.Humidity ?? "–"}</td>
-          <td class="text-right">${formatNumber(item.BatterHRPA, 3)}</td>
-          <td class="text-right">${formatNumber(item.PitcherHRPA, 3)}</td>
-          <td class="text-right">${item.PASinceLastHR ?? "–"}</td>
-          <td class="text-right">${formatNumber(item.DraftKingsOdds, 2)}</td>
-        </tr>
-      `);
-    });
-  }
+    async function fetchLineupsForToday() {
+      const date = getTodayDate();
+      const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
 
-  const headers = document.querySelectorAll("#lineup-table thead th");
-  let sortColumn = -1;
-  let sortAsc = true;
+      statusDiv.textContent = `Loading lineups for ${date}...`;
 
-  headers.forEach((th, idx) => {
-    th.addEventListener("click", () => {
-      const type = th.getAttribute("data-type");
-      sortAsc = (idx === sortColumn) ? !sortAsc : true;
-      sortColumn = idx;
+      try {
+        const res = await fetch(apiUrl, {
+          headers: { "Ocp-Apim-Subscription-Key": API_KEY }
+        });
 
-      const rows = Array.from(tbody.querySelectorAll("tr")).map(row => {
-        const cells = row.querySelectorAll("td");
-        return {
-          element: row,
-          values: Array.from(cells).map(td => td.textContent)
-        };
-      });
-
-      rows.sort((a, b) => {
-        let valA = a.values[idx];
-        let valB = b.values[idx];
-
-        if (type === "number") {
-          valA = valA === "–" ? -Infinity : parseFloat(valA);
-          valB = valB === "–" ? -Infinity : parseFloat(valB);
-          return sortAsc ? valA - valB : valB - valA;
-        } else {
-          valA = valA.toLowerCase();
-          valB = valB.toLowerCase();
-          if (valA < valB) return sortAsc ? -1 : 1;
-          if (valA > valB) return sortAsc ? 1 : -1;
-          return 0;
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status} ${res.statusText}`);
         }
+
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          statusDiv.textContent = `No lineup data available for ${date}.`;
+          tbody.innerHTML = "";
+          return;
+        }
+
+        statusDiv.textContent = `Showing ${data.length} lineup entries for ${date}.`;
+        insertRows(data);
+
+      } catch (err) {
+        statusDiv.textContent = `Failed to load lineups: ${err.message}`;
+        console.error(err);
+        tbody.innerHTML = "";
+      }
+    }
+
+    function insertRows(data) {
+      tbody.innerHTML = "";
+      data.forEach(item => {
+        tbody.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td>${item.Name || "–"}</td>
+            <td>${item.Team || "–"}</td>
+            <td>${item.Opponent || "–"}</td>
+            <td>${item.Position || "–"}</td>
+            <td>${item.OpposingPitcher || "–"}</td>
+            <td>${item.Ballpark || "–"}</td>
+            <td class="text-right">${item.Temperature ?? "–"}</td>
+            <td>${item.Wind || "–"}</td>
+            <td class="text-right">${item.Humidity ?? "–"}</td>
+          </tr>
+        `);
       });
+    }
 
-      rows.forEach(rowObj => tbody.appendChild(rowObj.element));
-    });
-  });
-
-  fetchLineupsForToday();
-</script>
-
+    fetchLineupsForToday();
+  </script>
 </body>
 </html>

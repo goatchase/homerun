@@ -2,126 +2,116 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>MLB Lineup & HR Predictor</title>
+  <title>MLB Daily Lineups</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
   <style>
     body { font-family: 'Roboto', sans-serif; margin: 20px; }
     h1 { margin-bottom: 10px; }
     #controls { margin-bottom: 10px; }
-    input, select, button { margin-right: 8px; font-size: 1rem; padding: 4px; }
+    input, button { margin-right: 8px; font-size: 1rem; padding: 4px; }
     #status { margin-top: 10px; font-style: italic; color: #555; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
     th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
     th { background: #f0f0f0; }
+    .team-label { margin-top: 30px; font-size: 1.1rem; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <h1>MLB Lineup & HR Predictor</h1>
+  <h1>MLB Daily Lineups</h1>
 
   <div id="controls">
     <label for="datePicker">Date:</label>
     <input type="date" id="datePicker" />
-    <button onclick="loadSchedule()">Load Games</button>
-    <select id="gameSelect" onchange="loadLineups(this.value)"></select>
-    <button onclick="loadLineups(gameSelect.value)">Refresh Lineups</button>
+    <button onclick="loadAllLineups()">Load All Lineups</button>
   </div>
 
-  <div id="status">Choose a date and load games to begin.</div>
+  <div id="status">Choose a date to begin.</div>
   <div id="lineups"></div>
 
   <script>
     const status = document.getElementById('status');
     const lineupsDiv = document.getElementById('lineups');
-    const gameSelect = document.getElementById('gameSelect');
     const datePicker = document.getElementById('datePicker');
 
-    // Default date to today
+    // Default to today
     const today = new Date().toISOString().slice(0,10);
     datePicker.value = today;
 
-    async function loadSchedule() {
+    async function loadAllLineups() {
       const date = datePicker.value;
       status.textContent = `Loading games for ${date}...`;
-      gameSelect.innerHTML = '';
       lineupsDiv.innerHTML = '';
 
       try {
-        const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}`);
-        const data = await res.json();
-        const games = data.dates?.[0]?.games;
+        const scheduleRes = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}`);
+        const scheduleData = await scheduleRes.json();
+        const games = scheduleData.dates?.[0]?.games;
         if (!games || games.length === 0) throw new Error(`No games found for ${date}.`);
 
-        status.textContent = `Found ${games.length} game(s) on ${date}.`;
-        games.forEach(game => {
-          const away = game.teams.away.team.name;
-          const home = game.teams.home.team.name;
-          const option = document.createElement('option');
-          option.value = game.gamePk;
-          option.textContent = `${away} @ ${home}`;
-          gameSelect.appendChild(option);
-        });
+        status.textContent = `Found ${games.length} game(s). Fetching lineups...`;
 
-        loadLineups(games[0].gamePk);
-      } catch (err) {
-        status.textContent = `Schedule error: ${err.message}`;
-      }
-    }
+        for (const game of games) {
+          const gamePk = game.gamePk;
+          const gameRes = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`);
+          const feed = await gameRes.json();
 
-    async function loadLineups(gamePk) {
-      status.textContent = 'Loading lineups...';
-      lineupsDiv.innerHTML = '';
+          const away = feed.liveData?.boxscore?.teams?.away;
+          const home = feed.liveData?.boxscore?.teams?.home;
 
-      try {
-        const res = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`);
-        const feed = await res.json();
-        console.log('Feed Live JSON:', feed);
+          const awayName = feed.gameData.teams.away.name;
+          const homeName = feed.gameData.teams.home.name;
 
-        const away = feed.liveData?.boxscore?.teams?.away;
-        const home = feed.liveData?.boxscore?.teams?.home;
+          if (!away?.battingOrder?.length && !home?.battingOrder?.length) {
+            const noDataDiv = document.createElement('div');
+            noDataDiv.innerHTML = `<div class="team-label">${awayName} @ ${homeName}</div><div><em>No lineups posted yet.</em></div>`;
+            lineupsDiv.appendChild(noDataDiv);
+            continue;
+          }
 
-        if ([away, home].every(tm => !tm?.battingOrder?.length)) {
-          status.textContent = 'Lineups not yet posted. You can Refresh.';
-          return;
+          const gameHeader = document.createElement('div');
+          gameHeader.className = 'team-label';
+          gameHeader.textContent = `${awayName} @ ${homeName}`;
+          lineupsDiv.appendChild(gameHeader);
+
+          [ ['away', away, awayName], ['home', home, homeName] ].forEach(([side, teamData, teamLabel]) => {
+            if (!teamData?.battingOrder?.length) return;
+
+            const table = document.createElement('table');
+            const titleRow = document.createElement('tr');
+            titleRow.innerHTML = `<th colspan="4">${teamLabel} (${side})</th>`;
+            table.appendChild(titleRow);
+
+            const header = document.createElement('tr');
+            header.innerHTML = '<th>#</th><th>Player</th><th>Pos</th><th>Order</th>';
+            table.appendChild(header);
+
+            teamData.battingOrder.forEach(id => {
+              const p = teamData.players['ID' + id];
+              if (!p) return;
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td>${p.battingOrder}</td>
+                <td>${p.person.fullName}</td>
+                <td>${p.position?.abbreviation || '–'}</td>
+                <td>${p.battingOrder}</td>
+              `;
+              table.appendChild(tr);
+            });
+
+            lineupsDiv.appendChild(table);
+          });
         }
 
-        status.textContent = 'Lineups loaded!';
-        ['away', 'home'].forEach(side => {
-          const team = feed.liveData.boxscore.teams[side];
-          const name = feed.gameData.teams[side].name;
-
-          const tbl = document.createElement('table');
-          const th = document.createElement('tr');
-          th.innerHTML = `<th colspan="4">${name} (${side})</th>`;
-          tbl.appendChild(th);
-
-          const head = document.createElement('tr');
-          head.innerHTML = '<th>#</th><th>Player</th><th>Pos</th><th>Order</th>';
-          tbl.appendChild(head);
-
-          team.battingOrder.forEach(id => {
-            const p = team.players['ID' + id];
-            if (!p) return;
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${p.battingOrder}</td>
-              <td>${p.person.fullName}</td>
-              <td>${p.position?.abbreviation || '–'}</td>
-              <td>${p.battingOrder}</td>
-            `;
-            tbl.appendChild(tr);
-          });
-
-          lineupsDiv.appendChild(tbl);
-        });
+        status.textContent = `Lineups loaded for ${date}.`;
       } catch (err) {
         console.error(err);
-        status.textContent = `Lineups load error: ${err.message}`;
+        status.textContent = `Error loading data: ${err.message}`;
       }
     }
 
-    // Initialize
-    loadSchedule();
+    // Load today's by default
+    loadAllLineups();
   </script>
 
 </body>

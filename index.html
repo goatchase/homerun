@@ -115,7 +115,7 @@
 
   async function fetchLineupsForToday() {
     statusDiv.textContent = "Loading lineups...";
-    const date = getTodayDate();
+    const date = "2023-06-01";  // example known game day in the past getTodayDate();
     const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
 
     try {

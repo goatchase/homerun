@@ -2,48 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>MLB Home Run Predictor</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
+  <title>MLB Daily Lineups</title>
   <style>
     body {
-      font-family: 'Roboto', sans-serif;
-      font-size: 10pt;
+      font-family: Arial, sans-serif;
       margin: 20px;
-      background: #fff;
+      background: #f9f9f9;
     }
     h1 {
-      margin-bottom: 10px;
-    }
-    #controls {
       margin-bottom: 15px;
-    }
-    select, button {
-      font-size: 10pt;
-      padding: 4px 8px;
     }
     table {
       border-collapse: collapse;
       width: 100%;
       background: white;
-      table-layout: fixed;
-    }
-    thead th {
-      background: #f0f0f0;
-      border-bottom: 2px solid #ccc;
-      padding: 6px 8px;
-      text-align: left;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
     }
     th, td {
-      padding: 6px 8px;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      border-bottom: 1px solid #ddd;
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+      font-size: 14px;
     }
-    .text-left { text-align: left; }
-    .text-right { text-align: right; }
+    th {
+      background-color: #0074D9;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    tbody tr:hover {
+      background-color: #f1f1f1;
+    }
     #status {
-      margin-top: 10px;
+      margin-bottom: 10px;
       font-style: italic;
       color: #555;
     }
@@ -51,95 +43,85 @@
 </head>
 <body>
 
-  <h1>MLB Home Run Predictor</h1>
-  <div id="controls">
-    <label for="date">Select a date:</label>
-    <input type="date" id="date" value="2023-06-01" />
-    <button onclick="fetchLineups()">Load Lineups</button>
-  </div>
+  <h1>MLB Daily Lineups</h1>
+  <div id="status">Loading lineups...</div>
 
-  <div id="status">Choose a date and click "Load Lineups".</div>
-
-  <table id="lineup-table" aria-label="MLB Lineups Table">
+  <table aria-label="MLB Lineups Table">
     <thead>
       <tr>
-        <th>Batter</th>
         <th>Team</th>
         <th>Opponent</th>
-        <th>Pitcher</th>
-        <th>Ballpark</th>
-        <th class="text-right">Temp</th>
-        <th>Wind</th>
-        <th class="text-right">Humidity</th>
-        <th class="text-right">Batter HR/PA</th>
-        <th class="text-right">Pitcher HR/PA</th>
-        <th class="text-right">PA Since Last HR</th>
-        <th class="text-right">DK Odds</th>
+        <th>Batter</th>
+        <th>Position</th>
+        <th>Starting Pitcher</th>
       </tr>
     </thead>
-    <tbody></tbody>
+    <tbody id="lineups-body">
+      <!-- Lineup rows will be inserted here -->
+    </tbody>
   </table>
 
-<script>
-const API_KEY = "efac23180b2f43259ccbe52c75da0a0c";
-const PROXY_URL = "http://localhost:8080/";
-const statusDiv = document.getElementById("status");
-const tbody = document.querySelector("tbody");
+  <script>
+    const statusDiv = document.getElementById('status');
+    const tbody = document.getElementById('lineups-body');
 
-function formatNumber(num, digits=3) {
-  return (num === null || num === undefined) ? "–" : Number(num).toFixed(digits);
-}
+    async function fetchLineups() {
+      statusDiv.textContent = "Loading lineups...";
+      try {
+        const res = await fetch('https://dailymlblineups.com/api/lineups');
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        const games = await res.json();
 
-async function fetchLineups() {
-  const date = document.getElementById("date").value;
-  const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
+        if (!games.length) {
+          statusDiv.textContent = "No lineup data available today.";
+          return;
+        }
 
-  statusDiv.textContent = `Loading lineups for ${date}...`;
-  tbody.innerHTML = "";
+        statusDiv.textContent = `Loaded ${games.length} games.`;
 
-  try {
-    const res = await fetch(apiUrl, {
-      headers: { "Ocp-Apim-Subscription-Key": API_KEY }
-    });
+        tbody.innerHTML = '';
 
-    if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
-    const data = await res.json();
+        games.forEach(game => {
+          const homeTeam = game.homeTeam;
+          const awayTeam = game.awayTeam;
+          const homeSP = game.homeStartingPitcher;
+          const awaySP = game.awayStartingPitcher;
 
-    if (!Array.isArray(data) || data.length === 0) {
-      statusDiv.textContent = `No data for ${date}.`;
-      return;
+          // Add home team batters
+          game.homeLineup.forEach(batter => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${homeTeam}</td>
+              <td>${awayTeam}</td>
+              <td>${batter.name}</td>
+              <td>${batter.position}</td>
+              <td>${homeSP}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          // Add away team batters
+          game.awayLineup.forEach(batter => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${awayTeam}</td>
+              <td>${homeTeam}</td>
+              <td>${batter.name}</td>
+              <td>${batter.position}</td>
+              <td>${awaySP}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        });
+
+      } catch (err) {
+        statusDiv.textContent = "Failed to load lineups.";
+        console.error("Error fetching lineups:", err);
+      }
     }
 
-    statusDiv.textContent = `Showing ${data.length} lineups for ${date}.`;
-    insertRows(data);
-  } catch (err) {
-    statusDiv.textContent = `Error: ${err.message}`;
-    console.error(err);
-  }
-}
-
-function insertRows(data) {
-  tbody.innerHTML = "";
-  data.forEach(item => {
-    tbody.insertAdjacentHTML("beforeend", `
-      <tr>
-        <td class="text-left">${item.Name ?? "–"}</td>
-        <td class="text-left">${item.Team ?? "–"}</td>
-        <td class="text-left">${item.Opponent ?? "–"}</td>
-        <td class="text-left">${item.OpposingPitcher ?? "–"}</td>
-        <td class="text-left">${item.Ballpark ?? "–"}</td>
-        <td class="text-right">${item.Temperature ?? "–"}</td>
-        <td class="text-left">${item.Wind ?? "–"}</td>
-        <td class="text-right">${item.Humidity ?? "–"}</td>
-        <td class="text-right">${formatNumber(item.BatterHRPA)}</td>
-        <td class="text-right">${formatNumber(item.PitcherHRPA)}</td>
-        <td class="text-right">${item.PASinceLastHR ?? "–"}</td>
-        <td class="text-right">${formatNumber(item.DraftKingsOdds, 2)}</td>
-      </tr>
-    `);
-  });
-}
-</script>
+    fetchLineups();
+  </script>
 
 </body>
 </html>

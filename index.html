@@ -5,49 +5,51 @@
   <title>MLB Home Run Predictor</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
   <style>
-  table {
-    border-collapse: separate; /* separate borders for horizontal lines only */
-    border-spacing: 0;
-    width: 100%;
-    margin-top: 20px;
-    table-layout: fixed;
-    background: white; /* uniform background */
-  }
-  thead th {
-    position: sticky;
-    top: 0;
-    background: #f0f0f0;
-    cursor: pointer;
-    border-bottom: 2px solid #ccc; /* horizontal header bottom line */
-    padding: 6px 8px;
-    user-select: none;
-  }
-  tbody tr {
-    border-bottom: 1px solid #ddd; /* light gray horizontal line */
-  }
-  tbody tr:last-child {
-    border-bottom: none; /* no line after last row */
-  }
-  th, td {
-    padding: 6px 8px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    border-left: none !important;  /* no vertical lines */
-    border-right: none !important; /* no vertical lines */
-  }
-  /* Left align text columns */
-  .text-left {
-    text-align: left;
-    padding-left: 12px;
-  }
-  /* Right align numeric columns */
-  .text-right {
-    text-align: right;
-    padding-right: 12px;
-    font-feature-settings: "tnum";
-  }
-</style>
+    /* Entire page font Roboto 10pt */
+    body {
+      font-family: 'Roboto', sans-serif;
+      font-size: 10pt;
+      margin: 20px;
+      background: white;
+      color: #111;
+    }
+
+    table {
+      border-collapse: separate; /* for only horizontal lines */
+      border-spacing: 0;
+      width: 100%;
+      margin-top: 20px;
+      table-layout: fixed;
+      background: white; /* uniform background */
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f0f0f0;
+      cursor: pointer;
+      border-bottom: 2px solid #ccc; /* horizontal header bottom line */
+      padding: 6px 8px;
+      user-select: none;
+      text-align: left; /* all headers left aligned */
+      font-weight: 700;
+    }
+    tbody tr {
+      border-bottom: 1px solid #ddd; /* light gray horizontal line */
+    }
+    tbody tr:last-child {
+      border-bottom: none; /* no line after last row */
+    }
+    th, td {
+      padding: 6px 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-left: none !important;  /* no vertical lines */
+      border-right: none !important; /* no vertical lines */
+      text-align: left; /* left align all cells */
+      font-variant-numeric: tabular-nums; /* consistent number spacing */
+    }
+  </style>
 </head>
 <body>
 
@@ -76,7 +78,17 @@
   </table>
 
   <script>
-    // Sample data row insertion (replace with your API fetch)
+    // Helper: format number with 3 significant digits or fallback "–"
+    function formatNum(value) {
+      if (value === null || value === undefined || isNaN(value)) return "–";
+      // Use toPrecision for significant digits, fallback to fixed decimals if small
+      if (value === 0) return "0";
+      if (Math.abs(value) < 0.001 || Math.abs(value) >= 1000) {
+        return value.toExponential(2);
+      }
+      return Number.parseFloat(value).toPrecision(3);
+    }
+
     const sampleData = [
       {
         player: "Aaron Judge",
@@ -115,18 +127,18 @@
       data.forEach(item => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td class="text-left">${item.player}</td>
-          <td class="text-left">${item.team}</td>
-          <td class="text-left">${item.opponent}</td>
-          <td class="text-left">${item.pitcher}</td>
-          <td class="text-left">${item.ballpark}</td>
-          <td class="text-right">${item.temperature ?? '–'}</td>
-          <td class="text-left">${item.wind ?? '–'}</td>
-          <td class="text-right">${item.humidity ?? '–'}</td>
-          <td class="text-right">${item.batter_hr_pa ?? '–'}</td>
-          <td class="text-right">${item.pitcher_hr_pa ?? '–'}</td>
-          <td class="text-right">${item.pa_since_hr ?? '–'}</td>
-          <td class="text-right">${item.dk_odds ?? '–'}</td>
+          <td>${item.player}</td>
+          <td>${item.team}</td>
+          <td>${item.opponent}</td>
+          <td>${item.pitcher}</td>
+          <td>${item.ballpark}</td>
+          <td>${formatNum(item.temperature)}</td>
+          <td>${item.wind ?? "–"}</td>
+          <td>${formatNum(item.humidity)}</td>
+          <td>${formatNum(item.batter_hr_pa)}</td>
+          <td>${formatNum(item.pitcher_hr_pa)}</td>
+          <td>${formatNum(item.pa_since_hr)}</td>
+          <td>${formatNum(item.dk_odds)}</td>
         `;
         tbody.appendChild(tr);
       });

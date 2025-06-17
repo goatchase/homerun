@@ -1,108 +1,159 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>MLB Lineups Today</title>
+  <meta charset="UTF-8" />
+  <title>MLB Home Run Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
   <style>
     body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
+      font-family: 'Roboto', sans-serif;
+      font-size: 12px;
+      margin: 20px;
+    }
+    h1 {
+      margin-bottom: 10px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 20px;
-      font-size: 14px;
+      margin-top: 10px;
     }
     th, td {
+      padding: 6px;
       border: 1px solid #ccc;
-      padding: 8px;
       text-align: left;
     }
     th {
-      background: #eee;
+      background-color: #f4f4f4;
     }
-    .team-header {
-      background: #f9f9f9;
-      font-weight: bold;
-      text-align: center;
+    #status {
+      margin-bottom: 10px;
+      font-style: italic;
     }
   </style>
 </head>
 <body>
-  <h1>Today's MLB Starting Lineups</h1>
+
+  <h1>MLB Home Run Predictor</h1>
+  <label for="datePicker">Select Date:</label>
+  <input type="date" id="datePicker" />
+  <div id="status">Select a date to load lineups.</div>
+
   <table id="lineupTable">
     <thead>
       <tr>
+        <th>Batter</th>
         <th>Team</th>
         <th>Opponent</th>
-        <th>Player</th>
-        <th>Batting Hand</th>
-        <th>Position</th>
         <th>Opposing Pitcher</th>
-        <th>Pitcher Throws</th>
+        <th>Batter Hand</th>
+        <th>Pitcher Hand</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script>
-    async function getGamesAndLineups() {
-      const today = new Date().toISOString().split('T')[0];
-      const scheduleRes = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}`);
-      const scheduleData = await scheduleRes.json();
-      const games = scheduleData.dates[0]?.games || [];
+    const tableBody = document.querySelector("#lineupTable tbody");
+    const statusDiv = document.getElementById("status");
 
-      for (const game of games) {
-        const gamePk = game.gamePk;
-        const liveRes = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`);
-        const liveData = await liveRes.json();
+    document.getElementById("datePicker").addEventListener("change", e => {
+      const date = e.target.value;
+      if (date) loadGames(date);
+    });
 
-        const home = liveData.liveData.boxscore.teams.home;
-        const away = liveData.liveData.boxscore.teams.away;
-        const homeName = liveData.gameData.teams.home.name;
-        const awayName = liveData.gameData.teams.away.name;
+    async function loadGames(date) {
+      statusDiv.textContent = "Loading lineups...";
+      tableBody.innerHTML = "";
 
-        const homePitcher = liveData.gameData.probablePitchers?.away;
-        const awayPitcher = liveData.gameData.probablePitchers?.home;
+      try {
+        const scheduleRes = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}`);
+        const scheduleData = await scheduleRes.json();
+        const gameIds = scheduleData.dates[0]?.games.map(game => game.gamePk) || [];
 
-        const allPlayers = liveData.gameData.players;
+        if (gameIds.length === 0) {
+          statusDiv.textContent = "No games found for that date.";
+          return;
+        }
 
-        const homeLineup = Object.values(home.players).filter(p => p.battingOrder);
-        const awayLineup = Object.values(away.players).filter(p => p.battingOrder);
+        const allLineups = [];
 
-        addLineupToTable(homeLineup, homeName, awayName, homePitcher, allPlayers);
-        addLineupToTable(awayLineup, awayName, homeName, awayPitcher, allPlayers);
+        for (const gameId of gameIds) {
+          const gameRes = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gameId}/feed/live`);
+          const gameData = await gameRes.json();
+          const box = gameData.liveData.boxscore;
+          const players = gameData.liveData.boxscore.players;
+
+          const homeTeam = box.teams.home;
+          const awayTeam = box.teams.away;
+
+          const homeStarterId = homeTeam.pitchers[0];
+          const awayStarterId = awayTeam.pitchers[0];
+
+          const homeStarter = players[`ID${homeStarterId}`];
+          const awayStarter = players[`ID${awayStarterId}`];
+
+          const homePitcher = {
+            name: homeStarter?.person.fullName || "–",
+            hand: homeStarter?.pitchHand.code || "–"
+          };
+          const awayPitcher = {
+            name: awayStarter?.person.fullName || "–",
+            hand: awayStarter?.pitchHand.code || "–"
+          };
+
+          for (const batterId of awayTeam.battingOrder) {
+            const batter = players[`ID${batterId}`];
+            if (!batter) continue;
+            allLineups.push({
+              batterName: batter.person.fullName,
+              team: awayTeam.team.name,
+              opponent: homeTeam.team.name,
+              pitcher: homePitcher.name,
+              batterHand: batter.batSide.code,
+              pitcherHand: homePitcher.hand
+            });
+          }
+
+          for (const batterId of homeTeam.battingOrder) {
+            const batter = players[`ID${batterId}`];
+            if (!batter) continue;
+            allLineups.push({
+              batterName: batter.person.fullName,
+              team: homeTeam.team.name,
+              opponent: awayTeam.team.name,
+              pitcher: awayPitcher.name,
+              batterHand: batter.batSide.code,
+              pitcherHand: awayPitcher.hand
+            });
+          }
+        }
+
+        if (allLineups.length === 0) {
+          statusDiv.textContent = "No lineup data available.";
+        } else {
+          statusDiv.textContent = `Loaded ${allLineups.length} batters.`;
+        }
+
+        allLineups.forEach(row => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${row.batterName}</td>
+            <td>${row.team}</td>
+            <td>${row.opponent}</td>
+            <td>${row.pitcher}</td>
+            <td>${row.batterHand}</td>
+            <td>${row.pitcherHand}</td>
+          `;
+          tableBody.appendChild(tr);
+        });
+
+      } catch (error) {
+        console.error(error);
+        statusDiv.textContent = "Error loading lineups.";
       }
     }
-
-    function addLineupToTable(lineup, team, opponent, opposingPitcher, allPlayers) {
-      const tbody = document.querySelector('#lineupTable tbody');
-      const pitcherName = opposingPitcher ? allPlayers[`ID${opposingPitcher.id}`]?.fullName || 'N/A' : 'N/A';
-      const pitcherThrows = opposingPitcher ? allPlayers[`ID${opposingPitcher.id}`]?.pitchHand?.code || 'N/A' : 'N/A';
-
-      lineup.sort((a, b) => parseInt(a.battingOrder) - parseInt(b.battingOrder));
-
-      for (const player of lineup) {
-        const playerInfo = player.person;
-        const position = player.position?.abbreviation || '';
-        const batHand = allPlayers[`ID${playerInfo.id}`]?.batSide?.code || 'N/A';
-
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${team}</td>
-          <td>${opponent}</td>
-          <td>${playerInfo.fullName}</td>
-          <td>${batHand}</td>
-          <td>${position}</td>
-          <td>${pitcherName}</td>
-          <td>${pitcherThrows}</td>
-        `;
-        tbody.appendChild(row);
-      }
-    }
-
-    getGamesAndLineups();
   </script>
+
 </body>
 </html>

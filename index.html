@@ -9,11 +9,18 @@
       font-family: 'Roboto', sans-serif;
       font-size: 10pt;
       margin: 20px;
+      background: #ffffff;
+    }
+    h1 {
+      font-size: 18pt;
+      margin-bottom: 10px;
     }
     table {
-      width: 100%;
       border-collapse: separate;
       border-spacing: 0;
+      width: 100%;
+      margin-top: 20px;
+      table-layout: fixed;
       background: white;
     }
     thead th {
@@ -24,7 +31,6 @@
       border-bottom: 2px solid #ccc;
       padding: 6px 8px;
       user-select: none;
-      text-align: left;
     }
     tbody tr {
       border-bottom: 1px solid #ddd;
@@ -54,9 +60,8 @@
 <body>
 
   <h1>MLB Home Run Predictor</h1>
-  <p>Data from Baseball Savant + MLB StatsAPI</p>
 
-  <table id="predictor-table" aria-label="MLB Home Run Predictor Table">
+  <table id="lineup-table" aria-label="MLB Lineups Table">
     <thead>
       <tr>
         <th data-type="string">Batter Name</th>
@@ -64,159 +69,119 @@
         <th data-type="string">Opponent</th>
         <th data-type="string">Opposing Pitcher</th>
         <th data-type="string">Ballpark</th>
-        <th data-type="number">Temperature (°F)</th>
+        <th data-type="number">Temperature</th>
         <th data-type="string">Wind</th>
-        <th data-type="number">Humidity (%)</th>
-        <th data-type="number">Batter HR/PA vs Pitcher Hand</th>
-        <th data-type="number">Pitcher HR/PA vs Batter Hand</th>
+        <th data-type="number">Humidity</th>
+        <th data-type="number">Batter HR/PA</th>
+        <th data-type="number">Pitcher HR/PA</th>
         <th data-type="number">PA Since Last HR</th>
         <th data-type="number">DraftKings Odds</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td colspan="12">Loading data...</td></tr>
+      <!-- Data rows will be inserted here -->
     </tbody>
   </table>
 
-<script>
-  // Helper function: fetch and parse CSV text into array of objects
-  function parseCSV(text) {
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',');
-    return lines.slice(1).map(line => {
-      const values = line.split(',');
-      let obj = {};
-      headers.forEach((h, i) => {
-        obj[h.trim()] = values[i]?.trim();
-      });
-      return obj;
-    });
-  }
+  <script>
+    async function fetchLineupsForToday() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
 
-  // Dummy function to fetch today's MLB games and lineups from statsapi
-  async function fetchMLBLineups() {
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const scheduleUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}`;
-    const scheduleRes = await fetch(scheduleUrl);
-    const scheduleData = await scheduleRes.json();
+      const url = `https://api.sportsdata.io/v4/mlb/scores/json/StartingLineupsByDate/${dateStr}`;
 
-    // For each game, fetch lineup & game info
-    let allLineups = [];
-    const games = scheduleData.dates?.[0]?.games || [];
-    for (const game of games) {
-      const gamePk = game.gamePk;
-      const liveFeedUrl = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
-      const feedRes = await fetch(liveFeedUrl);
-      const feedData = await feedRes.json();
-
-      // Get weather and stadium info
-      const venue = feedData.gameData?.venue || {};
-      const weather = feedData.gameData?.weather || {};
-      const homeTeam = feedData.gameData?.teams?.home?.abbreviation || '';
-      const awayTeam = feedData.gameData?.teams?.away?.abbreviation || '';
-
-      // Pitchers for each team
-      const homePitcher = feedData.liveData?.boxscore?.teams?.home?.pitchers?.[0] || null;
-      const awayPitcher = feedData.liveData?.boxscore?.teams?.away?.pitchers?.[0] || null;
-
-      // Lineups by team
-      const lineups = feedData.liveData?.boxscore?.teams || {};
-      const homeBatters = lineups.home?.batters || [];
-      const awayBatters = lineups.away?.batters || [];
-
-      // Map batters to player info
-      const playersInfo = feedData.gameData?.players || {};
-
-      // Build lineup array
-      homeBatters.forEach(playerId => {
-        const player = playersInfo[playerId];
-        allLineups.push({
-          batterName: player?.fullName,
-          batterTeam: homeTeam,
-          opponentTeam: awayTeam,
-          opposingPitcher: feedData.gameData.players[awayPitcher]?.fullName || '',
-          ballpark: venue?.name || '',
-          temperature: weather?.temp || null,
-          wind: weather?.windSpeed && weather?.windDirection ? `${weather.windSpeed} mph ${weather.windDirection}` : null,
-          humidity: weather?.humidity || null,
-          batterId: player?.id,
-          batterHand: player?.batSide?.code || null,
-          pitcherId: awayPitcher,
-          pitcherHand: feedData.gameData.players[awayPitcher]?.pitchHand?.code || null,
-          // Placeholders for stats:
-          batterHRPA: null,
-          pitcherHRPA: null,
-          paSinceHR: null,
-          draftKingsOdds: null
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Ocp-Apim-Subscription-Key': 'efac23180b2f43259ccbe52c75da0a0c'
+          }
         });
-      });
-      awayBatters.forEach(playerId => {
-        const player = playersInfo[playerId];
-        allLineups.push({
-          batterName: player?.fullName,
-          batterTeam: awayTeam,
-          opponentTeam: homeTeam,
-          opposingPitcher: feedData.gameData.players[homePitcher]?.fullName || '',
-          ballpark: venue?.name || '',
-          temperature: weather?.temp || null,
-          wind: weather?.windSpeed && weather?.windDirection ? `${weather.windSpeed} mph ${weather.windDirection}` : null,
-          humidity: weather?.humidity || null,
-          batterId: player?.id,
-          batterHand: player?.batSide?.code || null,
-          pitcherId: homePitcher,
-          pitcherHand: feedData.gameData.players[homePitcher]?.pitchHand?.code || null,
-          // Placeholders for stats:
-          batterHRPA: null,
-          pitcherHRPA: null,
-          paSinceHR: null,
-          draftKingsOdds: null
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const games = await response.json();
+        populateTable(games);
+
+      } catch (err) {
+        console.error("Failed to fetch lineups:", err);
+      }
+    }
+
+    function populateTable(games) {
+      const tbody = document.querySelector("#lineup-table tbody");
+      tbody.innerHTML = "";
+
+      games.forEach(game => {
+        const opponent = game.HomeTeam === game.Team ? game.AwayTeam : game.HomeTeam;
+        const pitcher = game.Pitcher?.Name ?? '—';
+        const ballpark = game.Venue?.Name ?? '—';
+
+        game.Lineups.forEach(player => {
+          if (!player.Player || !player.BattingOrder) return;
+
+          const fullName = `${player.Player.FirstName ?? ''} ${player.Player.LastName ?? ''}`;
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="text-left">${fullName}</td>
+            <td class="text-left">${game.Team}</td>
+            <td class="text-left">${opponent}</td>
+            <td class="text-left">${pitcher}</td>
+            <td class="text-left">${ballpark}</td>
+            <td class="text-right">–</td>
+            <td class="text-left">–</td>
+            <td class="text-right">–</td>
+            <td class="text-right">–</td>
+            <td class="text-right">–</td>
+            <td class="text-right">–</td>
+            <td class="text-right">–</td>
+          `;
+          tbody.appendChild(tr);
         });
       });
     }
-    return allLineups;
-  }
 
-  // Fetch Baseball Savant data for HR/PA splits (simplified example)
-  async function fetchHRPAData() {
-    // This is a placeholder URL and minimal example for demo:
-    // Real URL and parsing logic will be more complex, likely CSV with filters.
-    // We might fetch CSV from Statcast for 2025 season and compute HR/PA by player and pitcher handedness.
-    return {}; // Return empty for now
-  }
+    // Sortable headers
+    const headers = document.querySelectorAll("#lineup-table thead th");
+    let sortColumn = -1;
+    let sortAsc = true;
 
-  // Main function to fetch data and fill table
-  async function main() {
-    const tbody = document.querySelector("#predictor-table tbody");
-    tbody.innerHTML = '<tr><td colspan="12">Loading lineups and stats...</td></tr>';
+    headers.forEach((th, idx) => {
+      th.addEventListener("click", () => {
+        const type = th.getAttribute("data-type");
+        sortAsc = (idx === sortColumn) ? !sortAsc : true;
+        sortColumn = idx;
 
-    const lineups = await fetchMLBLineups();
-    // Ideally fetch and merge Baseball Savant HR/PA data here
-    // const hrpaData = await fetchHRPAData();
+        const rows = Array.from(document.querySelectorAll("#lineup-table tbody tr"));
+        rows.sort((a, b) => {
+          const aText = a.children[idx].textContent.trim();
+          const bText = b.children[idx].textContent.trim();
 
-    // For demo, just fill the table with lineups and dummy data for HR/PA and odds
-    tbody.innerHTML = '';
-    lineups.forEach(item => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td class="text-left">${item.batterName ?? '–'}</td>
-        <td class="text-left">${item.batterTeam ?? '–'}</td>
-        <td class="text-left">${item.opponentTeam ?? '–'}</td>
-        <td class="text-left">${item.opposingPitcher ?? '–'}</td>
-        <td class="text-left">${item.ballpark ?? '–'}</td>
-        <td class="text-right">${item.temperature ?? '–'}</td>
-        <td class="text-left">${item.wind ?? '–'}</td>
-        <td class="text-right">${item.humidity ?? '–'}</td>
-        <td class="text-right">${(item.batterHRPA !== null ? item.batterHRPA.toFixed(3) : '–')}</td>
-        <td class="text-right">${(item.pitcherHRPA !== null ? item.pitcherHRPA.toFixed(3) : '–')}</td>
-        <td class="text-right">${(item.paSinceHR !== null ? item.paSinceHR : '–')}</td>
-        <td class="text-right">${(item.draftKingsOdds !== null ? item.draftKingsOdds.toFixed(2) : '–')}</td>
-      `;
-      tbody.appendChild(tr);
+          if (type === "number") {
+            const aNum = parseFloat(aText) || 0;
+            const bNum = parseFloat(bText) || 0;
+            return sortAsc ? aNum - bNum : bNum - aNum;
+          } else {
+            return sortAsc
+              ? aText.localeCompare(bText)
+              : bText.localeCompare(aText);
+          }
+        });
+
+        const tbody = document.querySelector("#lineup-table tbody");
+        tbody.innerHTML = "";
+        rows.forEach(row => tbody.appendChild(row));
+      });
     });
-  }
 
-  main();
-</script>
+    // Run fetch on page load
+    fetchLineupsForToday();
+  </script>
 
 </body>
 </html>

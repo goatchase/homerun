@@ -9,15 +9,17 @@
       font-family: 'Roboto', sans-serif;
       font-size: 10pt;
       margin: 20px;
-      background: white;
-      color: #222;
+      background: #fff;
+    }
+    h1 {
+      margin-bottom: 10px;
     }
     table {
       border-collapse: separate;
       border-spacing: 0;
       width: 100%;
-      table-layout: fixed;
       background: white;
+      table-layout: fixed;
     }
     thead th {
       position: sticky;
@@ -27,6 +29,10 @@
       border-bottom: 2px solid #ccc;
       padding: 6px 8px;
       user-select: none;
+      text-align: left;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
     tbody tr {
       border-bottom: 1px solid #ddd;
@@ -37,8 +43,8 @@
     th, td {
       padding: 6px 8px;
       overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
+      text-overflow: ellipsis;
       border-left: none !important;
       border-right: none !important;
     }
@@ -53,7 +59,8 @@
       padding-right: 12px;
       font-feature-settings: "tnum";
     }
-    #loading {
+    /* Loading and error styles */
+    #status {
       margin-top: 10px;
       font-style: italic;
       color: #555;
@@ -63,7 +70,7 @@
 <body>
 
   <h1>MLB Home Run Predictor</h1>
-  <div id="loading">Loading lineups...</div>
+  <div id="status">Loading lineups...</div>
 
   <table id="lineup-table" aria-label="MLB Lineups Table">
     <thead>
@@ -87,127 +94,104 @@
     </tbody>
   </table>
 
-  <script>
-    const tbody = document.querySelector("#lineup-table tbody");
-    const loadingEl = document.getElementById("loading");
+<script>
+  const API_KEY = "efac23180b2f43259ccbe52c75da0a0c"; // Your SportsDataIO API key
+  const PROXY_URL = "http://localhost:8080/"; // Your local CORS proxy
 
-    // YOUR API KEY
-    const API_KEY = "efac23180b2f43259ccbe52c75da0a0c";
-    // Your local proxy URL:
-    const PROXY_URL = "http://localhost:8080/";
+  const tbody = document.querySelector("#lineup-table tbody");
+  const statusDiv = document.getElementById("status");
 
-    // Fetch today's date in yyyy-mm-dd format
-    function getTodayDate() {
-      return new Date().toISOString().slice(0, 10);
-    }
+  function formatNumber(num, digits=3) {
+    return (num === null || num === undefined) ? "–" : Number(num).toFixed(digits);
+  }
 
-    async function fetchLineupsForToday() {
-      loadingEl.textContent = "Loading lineups...";
-      const today = getTodayDate();
-      const apiUrl = `http://localhost:8080/https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${today}`;
-      const fullUrl = PROXY_URL + apiUrl;
+  function getTodayDate() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
 
-      try {
-        const response = await fetch(fullUrl, {
-          headers: {
-            "Ocp-Apim-Subscription-Key": API_KEY
-          }
-        });
+  async function fetchLineupsForToday() {
+    statusDiv.textContent = "Loading lineups...";
+    const date = getTodayDate();
+    const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status} ${response.statusText}`);
-        }
+    try {
+      const res = await fetch(apiUrl, {
+        headers: { "Ocp-Apim-Subscription-Key": API_KEY }
+      });
 
-        const data = await response.json();
-        loadingEl.textContent = "";
-        return data;
-
-      } catch (error) {
-        loadingEl.textContent = "Failed to load lineups: " + error.message;
-        console.error("Failed to fetch lineups:", error);
-        return [];
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status} ${res.statusText}`);
       }
-    }
 
-    // Format numbers consistently to 3 decimals for rates
-    function formatNumber(num, decimals = 3) {
-      if (num === null || num === undefined || isNaN(num)) return "–";
-      return num.toFixed(decimals);
-    }
+      const data = await res.json();
 
-    // Insert rows into table from API data
-    function insertRows(data) {
-      tbody.innerHTML = "";
-      if (!data || data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:10px;">No data available</td></tr>`;
+      if (!Array.isArray(data) || data.length === 0) {
+        statusDiv.textContent = "No lineup data available for today.";
+        tbody.innerHTML = "";
         return;
       }
 
-      data.forEach(item => {
-        // Defensive fallback values:
-        const playerName = item.Name || "–";
-        const team = item.Team || "–";
-        const opponent = item.Opponent || "–";
-        const pitcher = item.OpposingPitcher || "–";
-        const ballpark = item.Ballpark || "–";
+      statusDiv.textContent = `Showing ${data.length} lineup entries for ${date}.`;
+      insertRows(data);
 
-        // For demo, temperature, wind, humidity, DK odds, HR/PA, PA since last HR
-        // are not provided by this API, so we show '–' or you can enhance with other APIs
-
-        const temperature = "–";
-        const wind = "–";
-        const humidity = "–";
-
-        // Example dummy values (replace with real data if available)
-        const batter_hr_pa = item.BatterHRPA ?? null;
-        const pitcher_hr_pa = item.PitcherHRPA ?? null;
-        const pa_since_hr = item.PASinceLastHR ?? null;
-        const dk_odds = item.DraftKingsOdds ?? null;
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="text-left">${playerName}</td>
-          <td class="text-left">${team}</td>
-          <td class="text-left">${opponent}</td>
-          <td class="text-left">${pitcher}</td>
-          <td class="text-left">${ballpark}</td>
-          <td class="text-right">${temperature}</td>
-          <td class="text-left">${wind}</td>
-          <td class="text-right">${humidity}</td>
-          <td class="text-right">${formatNumber(batter_hr_pa)}</td>
-          <td class="text-right">${formatNumber(pitcher_hr_pa)}</td>
-          <td class="text-right">${pa_since_hr ?? "–"}</td>
-          <td class="text-right">${dk_odds ?? "–"}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+    } catch (err) {
+      statusDiv.textContent = `Failed to load lineups: ${err.message}`;
+      tbody.innerHTML = "";
+      console.error(err);
     }
+  }
 
-    // Sorting functionality
-    const headers = document.querySelectorAll("#lineup-table thead th");
-    let sortColumn = -1;
-    let sortAsc = true;
+  function insertRows(data) {
+    tbody.innerHTML = "";
+    data.forEach(item => {
+      tbody.insertAdjacentHTML("beforeend", `
+        <tr>
+          <td class="text-left">${item.Name ?? "–"}</td>
+          <td class="text-left">${item.Team ?? "–"}</td>
+          <td class="text-left">${item.Opponent ?? "–"}</td>
+          <td class="text-left">${item.OpposingPitcher ?? "–"}</td>
+          <td class="text-left">${item.Ballpark ?? "–"}</td>
+          <td class="text-right">${item.Temperature ?? "–"}</td>
+          <td class="text-left">${item.Wind ?? "–"}</td>
+          <td class="text-right">${item.Humidity ?? "–"}</td>
+          <td class="text-right">${formatNumber(item.BatterHRPA, 3)}</td>
+          <td class="text-right">${formatNumber(item.PitcherHRPA, 3)}</td>
+          <td class="text-right">${item.PASinceLastHR ?? "–"}</td>
+          <td class="text-right">${formatNumber(item.DraftKingsOdds, 2)}</td>
+        </tr>
+      `);
+    });
+  }
 
-    function sortData(data, idx, type) {
-      return data.sort((a, b) => {
-        let valA, valB;
-        switch (idx) {
-          case 0: valA = a.Name ?? ""; valB = b.Name ?? ""; break;
-          case 1: valA = a.Team ?? ""; valB = b.Team ?? ""; break;
-          case 2: valA = a.Opponent ?? ""; valB = b.Opponent ?? ""; break;
-          case 3: valA = a.OpposingPitcher ?? ""; valB = b.OpposingPitcher ?? ""; break;
-          case 4: valA = a.Ballpark ?? ""; valB = b.Ballpark ?? ""; break;
-          case 5: valA = null; valB = null; break; // temp unknown
-          case 6: valA = null; valB = null; break; // wind unknown
-          case 7: valA = null; valB = null; break; // humidity unknown
-          case 8: valA = a.BatterHRPA ?? -Infinity; valB = b.BatterHRPA ?? -Infinity; break;
-          case 9: valA = a.PitcherHRPA ?? -Infinity; valB = b.PitcherHRPA ?? -Infinity; break;
-          case 10: valA = a.PASinceLastHR ?? -Infinity; valB = b.PASinceLastHR ?? -Infinity; break;
-          case 11: valA = a.DraftKingsOdds ?? -Infinity; valB = b.DraftKingsOdds ?? -Infinity; break;
-          default: valA = ""; valB = "";
-        }
+  const headers = document.querySelectorAll("#lineup-table thead th");
+  let sortColumn = -1;
+  let sortAsc = true;
+
+  headers.forEach((th, idx) => {
+    th.addEventListener("click", () => {
+      const type = th.getAttribute("data-type");
+      sortAsc = (idx === sortColumn) ? !sortAsc : true;
+      sortColumn = idx;
+
+      const rows = Array.from(tbody.querySelectorAll("tr")).map(row => {
+        const cells = row.querySelectorAll("td");
+        return {
+          element: row,
+          values: Array.from(cells).map(td => td.textContent)
+        };
+      });
+
+      rows.sort((a, b) => {
+        let valA = a.values[idx];
+        let valB = b.values[idx];
 
         if (type === "number") {
+          valA = valA === "–" ? -Infinity : parseFloat(valA);
+          valB = valB === "–" ? -Infinity : parseFloat(valB);
           return sortAsc ? valA - valB : valB - valA;
         } else {
           valA = valA.toLowerCase();
@@ -217,27 +201,13 @@
           return 0;
         }
       });
-    }
 
-    headers.forEach((th, idx) => {
-      th.addEventListener("click", async () => {
-        if (!window.lineupData) return;
-        const type = th.getAttribute("data-type");
-        sortAsc = (idx === sortColumn) ? !sortAsc : true;
-        sortColumn = idx;
-
-        window.lineupData = sortData(window.lineupData, idx, type);
-        insertRows(window.lineupData);
-      });
+      rows.forEach(rowObj => tbody.appendChild(rowObj.element));
     });
+  });
 
-    // Init load
-    (async () => {
-      window.lineupData = await fetchLineupsForToday();
-      insertRows(window.lineupData);
-    })();
-
-  </script>
+  fetchLineupsForToday();
+</script>
 
 </body>
 </html>

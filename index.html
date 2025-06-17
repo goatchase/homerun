@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>MLB Lineups Viewer</title>
+  <title>MLB Home Run Predictor</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
   <style>
     body {
@@ -14,122 +14,123 @@
     h1 {
       margin-bottom: 10px;
     }
-    #date-selector {
-      margin-bottom: 20px;
-      font-size: 14px;
-      padding: 6px 8px;
-    }
-    #status {
+    select {
       margin-bottom: 10px;
-      font-style: italic;
-      color: #555;
     }
     table {
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       width: 100%;
       background: white;
-      margin-bottom: 20px;
+      table-layout: fixed;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f0f0f0;
+      cursor: pointer;
+      border-bottom: 2px solid #ccc;
+      padding: 6px 8px;
+      user-select: none;
+      text-align: left;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    tbody tr {
+      border-bottom: 1px solid #ddd;
     }
     th, td {
-      padding: 8px;
-      border: 1px solid #ddd;
+      padding: 6px 8px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .text-left {
       text-align: left;
     }
-    th {
-      background-color: #f2f2f2;
+    .text-right {
+      text-align: right;
+    }
+    #status {
+      margin-top: 10px;
+      font-style: italic;
+      color: #555;
     }
   </style>
 </head>
 <body>
+  <h1>MLB Home Run Predictor</h1>
 
-  <h1>MLB Lineups Viewer</h1>
-  <input type="date" id="date-selector" />
-  <div id="status">Loading lineups...</div>
-  <table>
+  <label for="datePicker">Select Date: </label>
+  <input type="date" id="datePicker" />
+
+  <div id="status">Loading games...</div>
+
+  <table id="lineup-table" aria-label="MLB Lineups Table">
     <thead>
       <tr>
-        <th>Batter Name</th>
-        <th>Team</th>
-        <th>Opponent</th>
-        <th>Opposing Pitcher</th>
-        <th>Ballpark</th>
-        <th>Temperature</th>
-        <th>Wind</th>
-        <th>Humidity</th>
-        <th>Batter HR/PA</th>
-        <th>Pitcher HR/PA</th>
-        <th>PA Since Last HR</th>
-        <th>DraftKings Odds</th>
+        <th data-type="string">Home Team</th>
+        <th data-type="string">Away Team</th>
+        <th data-type="string">Game Time</th>
       </tr>
     </thead>
-    <tbody id="lineup-body"></tbody>
+    <tbody></tbody>
   </table>
 
   <script>
-    const API_KEY = "efac23180b2f43259ccbe52c75da0a0c";
-    const PROXY_URL = "http://localhost:8080/";
-    const tbody = document.getElementById("lineup-body");
+    const tbody = document.querySelector("#lineup-table tbody");
     const statusDiv = document.getElementById("status");
-    const dateInput = document.getElementById("date-selector");
+    const datePicker = document.getElementById("datePicker");
 
-    dateInput.value = new Date().toISOString().split("T")[0];
-    dateInput.addEventListener("change", () => fetchLineups(dateInput.value));
-
-    function formatNumber(num, digits = 3) {
-      return (num === null || num === undefined) ? "–" : Number(num).toFixed(digits);
+    function getTodayDate() {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
     }
 
-    async function fetchLineups(date) {
-      statusDiv.textContent = "Loading lineups...";
-      const url = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
+    async function loadGames(dateStr) {
+      statusDiv.textContent = "Loading games...";
+      tbody.innerHTML = "";
 
       try {
-        const res = await fetch(url, {
-          headers: { "Ocp-Apim-Subscription-Key": API_KEY }
-        });
+        const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}`;
+        const res = await fetch(url);
+        const json = await res.json();
 
-        if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
-
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) {
-          statusDiv.textContent = "No lineup data available for this date.";
-          tbody.innerHTML = "";
+        if (!json.dates || json.dates.length === 0) {
+          statusDiv.textContent = "No games found for this date.";
           return;
         }
 
-        statusDiv.textContent = `Showing ${data.length} lineup entries for ${date}.`;
-        insertRows(data);
+        const games = json.dates[0].games;
 
+        games.forEach(game => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td class="text-left">${game.teams.home.team.name}</td>
+            <td class="text-left">${game.teams.away.team.name}</td>
+            <td class="text-left">${new Date(game.gameDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+          `;
+          tbody.appendChild(row);
+        });
+
+        statusDiv.textContent = `Showing ${games.length} games for ${dateStr}.`;
       } catch (err) {
-        statusDiv.textContent = `Failed to load lineups: ${err.message}`;
-        tbody.innerHTML = "";
         console.error(err);
+        statusDiv.textContent = "Failed to load games.";
       }
     }
 
-    function insertRows(data) {
-      tbody.innerHTML = "";
-      data.forEach(item => {
-        tbody.insertAdjacentHTML("beforeend", `
-          <tr>
-            <td>${item.Name ?? "–"}</td>
-            <td>${item.Team ?? "–"}</td>
-            <td>${item.Opponent ?? "–"}</td>
-            <td>${item.OpposingPitcher ?? "–"}</td>
-            <td>${item.Ballpark ?? "–"}</td>
-            <td>${item.Temperature ?? "–"}</td>
-            <td>${item.Wind ?? "–"}</td>
-            <td>${item.Humidity ?? "–"}</td>
-            <td>${formatNumber(item.BatterHRPA, 3)}</td>
-            <td>${formatNumber(item.PitcherHRPA, 3)}</td>
-            <td>${item.PASinceLastHR ?? "–"}</td>
-            <td>${formatNumber(item.DraftKingsOdds, 2)}</td>
-          </tr>
-        `);
-      });
-    }
+    datePicker.addEventListener("change", () => {
+      const selectedDate = datePicker.value;
+      if (selectedDate) loadGames(selectedDate);
+    });
 
-    fetchLineups(dateInput.value);
+    datePicker.value = getTodayDate();
+    loadGames(getTodayDate());
   </script>
 </body>
 </html>

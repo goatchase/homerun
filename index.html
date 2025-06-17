@@ -2,135 +2,126 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>MLB Home Run Predictor</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
+  <title>MLB Game Schedule Viewer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet"/>
   <style>
     body {
       font-family: 'Roboto', sans-serif;
-      font-size: 10pt;
-      margin: 20px;
-      background: #fff;
+      padding: 20px;
+      background: #f9f9f9;
     }
     h1 {
       margin-bottom: 10px;
     }
-    select {
-      margin-bottom: 10px;
+    #date-selector {
+      margin-bottom: 20px;
     }
     table {
-      border-collapse: separate;
-      border-spacing: 0;
       width: 100%;
+      border-collapse: collapse;
       background: white;
-      table-layout: fixed;
-    }
-    thead th {
-      position: sticky;
-      top: 0;
-      background: #f0f0f0;
-      cursor: pointer;
-      border-bottom: 2px solid #ccc;
-      padding: 6px 8px;
-      user-select: none;
-      text-align: left;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-    tbody tr {
-      border-bottom: 1px solid #ddd;
     }
     th, td {
-      padding: 6px 8px;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-    .text-left {
+      padding: 10px;
+      border: 1px solid #ccc;
       text-align: left;
     }
-    .text-right {
-      text-align: right;
+    th {
+      background-color: #eee;
     }
     #status {
-      margin-top: 10px;
+      margin-bottom: 10px;
       font-style: italic;
-      color: #555;
     }
   </style>
 </head>
 <body>
-  <h1>MLB Home Run Predictor</h1>
 
-  <label for="datePicker">Select Date: </label>
-  <input type="date" id="datePicker" />
+<h1>MLB Game Schedule</h1>
 
-  <div id="status">Loading games...</div>
+<label for="date-selector">Select Date: </label>
+<input type="date" id="date-selector" />
 
-  <table id="lineup-table" aria-label="MLB Lineups Table">
-    <thead>
-      <tr>
-        <th data-type="string">Home Team</th>
-        <th data-type="string">Away Team</th>
-        <th data-type="string">Game Time</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<div id="status">Loading games...</div>
 
-  <script>
-    const tbody = document.querySelector("#lineup-table tbody");
-    const statusDiv = document.getElementById("status");
-    const datePicker = document.getElementById("datePicker");
+<table id="games-table">
+  <thead>
+    <tr>
+      <th>Home Team</th>
+      <th>Away Team</th>
+      <th>Game Time (ET)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Game rows will be inserted here -->
+  </tbody>
+</table>
 
-    function getTodayDate() {
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
-    }
+<script>
+  const statusDiv = document.getElementById("status");
+  const dateInput = document.getElementById("date-selector");
+  const tbody = document.querySelector("#games-table tbody");
 
-    async function loadGames(dateStr) {
-      statusDiv.textContent = "Loading games...";
+  function formatDate(date) {
+    const d = new Date(date);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  async function loadGames(date) {
+    const formatted = formatDate(date);
+    statusDiv.textContent = `Loading games for ${formatted}...`;
+
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${formatted}`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const games = data.dates?.[0]?.games || [];
+
+      if (games.length === 0) {
+        statusDiv.textContent = "No games scheduled for this date.";
+        tbody.innerHTML = "";
+        return;
+      }
+
       tbody.innerHTML = "";
-
-      try {
-        const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}`;
-        const res = await fetch(url);
-        const json = await res.json();
-
-        if (!json.dates || json.dates.length === 0) {
-          statusDiv.textContent = "No games found for this date.";
-          return;
-        }
-
-        const games = json.dates[0].games;
-
-        games.forEach(game => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td class="text-left">${game.teams.home.team.name}</td>
-            <td class="text-left">${game.teams.away.team.name}</td>
-            <td class="text-left">${new Date(game.gameDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-          `;
-          tbody.appendChild(row);
+      games.forEach(game => {
+        const home = game.teams.home.team.name;
+        const away = game.teams.away.team.name;
+        const time = new Date(game.gameDate).toLocaleTimeString("en-US", {
+          hour: '2-digit', minute: '2-digit', hour12: true, timeZone: "America/New_York"
         });
 
-        statusDiv.textContent = `Showing ${games.length} games for ${dateStr}.`;
-      } catch (err) {
-        console.error(err);
-        statusDiv.textContent = "Failed to load games.";
-      }
+        const row = `
+          <tr>
+            <td>${home}</td>
+            <td>${away}</td>
+            <td>${time}</td>
+          </tr>
+        `;
+        tbody.insertAdjacentHTML("beforeend", row);
+      });
+
+      statusDiv.textContent = `Found ${games.length} game(s) for ${formatted}.`;
+    } catch (err) {
+      statusDiv.textContent = `Failed to load games: ${err.message}`;
+      console.error(err);
     }
+  }
 
-    datePicker.addEventListener("change", () => {
-      const selectedDate = datePicker.value;
-      if (selectedDate) loadGames(selectedDate);
-    });
+  // Initialize with today's date
+  const today = new Date();
+  dateInput.value = formatDate(today);
+  loadGames(today);
 
-    datePicker.value = getTodayDate();
-    loadGames(getTodayDate());
-  </script>
+  dateInput.addEventListener("change", (e) => {
+    loadGames(e.target.value);
+  });
+</script>
+
 </body>
 </html>

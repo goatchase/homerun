@@ -104,7 +104,7 @@
     async function fetchLineupsForToday() {
       loadingEl.textContent = "Loading lineups...";
       const today = getTodayDate();
-      const apiUrl = `https://api.sportsdata.io/v4/mlb/scores/json/StartingLineupsByDate/${today}`;
+      const apiUrl = `http://localhost:8080/https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${today}`;
       const fullUrl = PROXY_URL + apiUrl;
 
       try {

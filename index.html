@@ -7,6 +7,7 @@
   <style>
     body {
       font-family: 'Roboto', sans-serif;
+      font-size: 10pt;
       margin: 20px;
       background: #fff;
     }
@@ -23,112 +24,112 @@
       font-style: italic;
       color: #555;
     }
-    .game {
-      margin-bottom: 25px;
-      border: 1px solid #ccc;
-      padding: 12px;
-      border-radius: 8px;
-      background: #f9f9f9;
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background: white;
+      margin-bottom: 20px;
     }
-    .team-name {
-      font-weight: bold;
-      margin-top: 8px;
+    th, td {
+      padding: 8px;
+      border: 1px solid #ddd;
+      text-align: left;
     }
-    ul {
-      padding-left: 20px;
-      margin: 4px 0 10px;
+    th {
+      background-color: #f2f2f2;
     }
   </style>
 </head>
 <body>
 
   <h1>MLB Lineups Viewer</h1>
-
   <input type="date" id="date-selector" />
-  <div id="status">Loading games...</div>
-  <div id="games-container"></div>
+  <div id="status">Loading lineups...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Batter Name</th>
+        <th>Team</th>
+        <th>Opponent</th>
+        <th>Opposing Pitcher</th>
+        <th>Ballpark</th>
+        <th>Temperature</th>
+        <th>Wind</th>
+        <th>Humidity</th>
+        <th>Batter HR/PA</th>
+        <th>Pitcher HR/PA</th>
+        <th>PA Since Last HR</th>
+        <th>DraftKings Odds</th>
+      </tr>
+    </thead>
+    <tbody id="lineup-body"></tbody>
+  </table>
 
   <script>
-    const statusDiv = document.getElementById('status');
-    const container = document.getElementById('games-container');
-    const dateInput = document.getElementById('date-selector');
+    const API_KEY = "efac23180b2f43259ccbe52c75da0a0c";
+    const PROXY_URL = "http://localhost:8080/";
+    const tbody = document.getElementById("lineup-body");
+    const statusDiv = document.getElementById("status");
+    const dateInput = document.getElementById("date-selector");
 
-    // Set default to today
-    const today = new Date().toISOString().split("T")[0];
-    dateInput.value = today;
+    dateInput.value = new Date().toISOString().split("T")[0];
+    dateInput.addEventListener("change", () => fetchLineups(dateInput.value));
 
-    dateInput.addEventListener("change", () => {
-      loadGames(dateInput.value);
-    });
+    function formatNumber(num, digits = 3) {
+      return (num === null || num === undefined) ? "–" : Number(num).toFixed(digits);
+    }
 
-    async function loadGames(dateStr) {
-      statusDiv.textContent = "Loading games...";
-      container.innerHTML = "";
+    async function fetchLineups(date) {
+      statusDiv.textContent = "Loading lineups...";
+      const url = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
 
       try {
-        const response = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}`);
-        const scheduleData = await response.json();
+        const res = await fetch(url, {
+          headers: { "Ocp-Apim-Subscription-Key": API_KEY }
+        });
 
-        const games = scheduleData.dates[0]?.games || [];
+        if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
 
-        if (!games.length) {
-          statusDiv.textContent = "No games found for that date.";
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          statusDiv.textContent = "No lineup data available for this date.";
+          tbody.innerHTML = "";
           return;
         }
 
-        statusDiv.textContent = `Found ${games.length} games for ${dateStr}.`;
-
-        for (const game of games) {
-          const gameId = game.gamePk;
-          const boxscoreRes = await fetch(`https://statsapi.mlb.com/api/v1/game/${gameId}/boxscore`);
-          const boxscore = await boxscoreRes.json();
-
-          const homeTeam = game.teams.home.team.name;
-          const awayTeam = game.teams.away.team.name;
-
-          const homeLineup = extractLineup(boxscore.teams.home);
-          const awayLineup = extractLineup(boxscore.teams.away);
-
-          const div = document.createElement("div");
-          div.className = "game";
-          div.innerHTML = `
-            <div><strong>${awayTeam}</strong> @ <strong>${homeTeam}</strong></div>
-            <div class="team-name">${awayTeam} Batting Order:</div>
-            <ul>${awayLineup.map(p => `<li>${p}</li>`).join("")}</ul>
-            <div class="team-name">${homeTeam} Batting Order:</div>
-            <ul>${homeLineup.map(p => `<li>${p}</li>`).join("")}</ul>
-          `;
-          container.appendChild(div);
-        }
+        statusDiv.textContent = `Showing ${data.length} lineup entries for ${date}.`;
+        insertRows(data);
 
       } catch (err) {
+        statusDiv.textContent = `Failed to load lineups: ${err.message}`;
+        tbody.innerHTML = "";
         console.error(err);
-        statusDiv.textContent = "Error loading games.";
       }
     }
 
-    function extractLineup(teamData) {
-      const players = teamData.players;
-      const battingOrder = [];
-
-      // Filter and order by batting order
-      Object.values(players).forEach(player => {
-        if (player.position?.abbreviation !== "P" && player.stats?.batting?.battingOrder) {
-          battingOrder.push({
-            name: player.person.fullName,
-            order: parseInt(player.stats.batting.battingOrder)
-          });
-        }
+    function insertRows(data) {
+      tbody.innerHTML = "";
+      data.forEach(item => {
+        tbody.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td>${item.Name ?? "–"}</td>
+            <td>${item.Team ?? "–"}</td>
+            <td>${item.Opponent ?? "–"}</td>
+            <td>${item.OpposingPitcher ?? "–"}</td>
+            <td>${item.Ballpark ?? "–"}</td>
+            <td>${item.Temperature ?? "–"}</td>
+            <td>${item.Wind ?? "–"}</td>
+            <td>${item.Humidity ?? "–"}</td>
+            <td>${formatNumber(item.BatterHRPA, 3)}</td>
+            <td>${formatNumber(item.PitcherHRPA, 3)}</td>
+            <td>${item.PASinceLastHR ?? "–"}</td>
+            <td>${formatNumber(item.DraftKingsOdds, 2)}</td>
+          </tr>
+        `);
       });
-
-      // Sort by batting order (they come in 100, 200, ... form)
-      battingOrder.sort((a, b) => a.order - b.order);
-
-      return battingOrder.map(p => p.name);
     }
 
-    loadGames(today);
+    fetchLineups(dateInput.value);
   </script>
-
 </body>
 </html>

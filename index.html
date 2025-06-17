@@ -1,127 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>MLB Game Schedule Viewer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet"/>
+  <meta charset="UTF-8">
+  <title>MLB Lineups Today</title>
   <style>
     body {
-      font-family: 'Roboto', sans-serif;
+      font-family: Arial, sans-serif;
       padding: 20px;
-      background: #f9f9f9;
-    }
-    h1 {
-      margin-bottom: 10px;
-    }
-    #date-selector {
-      margin-bottom: 20px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      background: white;
+      margin-top: 20px;
+      font-size: 14px;
     }
     th, td {
-      padding: 10px;
       border: 1px solid #ccc;
+      padding: 8px;
       text-align: left;
     }
     th {
-      background-color: #eee;
+      background: #eee;
     }
-    #status {
-      margin-bottom: 10px;
-      font-style: italic;
+    .team-header {
+      background: #f9f9f9;
+      font-weight: bold;
+      text-align: center;
     }
   </style>
 </head>
 <body>
+  <h1>Today's MLB Starting Lineups</h1>
+  <table id="lineupTable">
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Opponent</th>
+        <th>Player</th>
+        <th>Batting Hand</th>
+        <th>Position</th>
+        <th>Opposing Pitcher</th>
+        <th>Pitcher Throws</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-<h1>MLB Game Schedule</h1>
+  <script>
+    async function getGamesAndLineups() {
+      const today = new Date().toISOString().split('T')[0];
+      const scheduleRes = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}`);
+      const scheduleData = await scheduleRes.json();
+      const games = scheduleData.dates[0]?.games || [];
 
-<label for="date-selector">Select Date: </label>
-<input type="date" id="date-selector" />
+      for (const game of games) {
+        const gamePk = game.gamePk;
+        const liveRes = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`);
+        const liveData = await liveRes.json();
 
-<div id="status">Loading games...</div>
+        const home = liveData.liveData.boxscore.teams.home;
+        const away = liveData.liveData.boxscore.teams.away;
+        const homeName = liveData.gameData.teams.home.name;
+        const awayName = liveData.gameData.teams.away.name;
 
-<table id="games-table">
-  <thead>
-    <tr>
-      <th>Home Team</th>
-      <th>Away Team</th>
-      <th>Game Time (ET)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <!-- Game rows will be inserted here -->
-  </tbody>
-</table>
+        const homePitcher = liveData.gameData.probablePitchers?.away;
+        const awayPitcher = liveData.gameData.probablePitchers?.home;
 
-<script>
-  const statusDiv = document.getElementById("status");
-  const dateInput = document.getElementById("date-selector");
-  const tbody = document.querySelector("#games-table tbody");
+        const allPlayers = liveData.gameData.players;
 
-  function formatDate(date) {
-    const d = new Date(date);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
+        const homeLineup = Object.values(home.players).filter(p => p.battingOrder);
+        const awayLineup = Object.values(away.players).filter(p => p.battingOrder);
 
-  async function loadGames(date) {
-    const formatted = formatDate(date);
-    statusDiv.textContent = `Loading games for ${formatted}...`;
-
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${formatted}`;
-
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-
-      const games = data.dates?.[0]?.games || [];
-
-      if (games.length === 0) {
-        statusDiv.textContent = "No games scheduled for this date.";
-        tbody.innerHTML = "";
-        return;
+        addLineupToTable(homeLineup, homeName, awayName, homePitcher, allPlayers);
+        addLineupToTable(awayLineup, awayName, homeName, awayPitcher, allPlayers);
       }
-
-      tbody.innerHTML = "";
-      games.forEach(game => {
-        const home = game.teams.home.team.name;
-        const away = game.teams.away.team.name;
-        const time = new Date(game.gameDate).toLocaleTimeString("en-US", {
-          hour: '2-digit', minute: '2-digit', hour12: true, timeZone: "America/New_York"
-        });
-
-        const row = `
-          <tr>
-            <td>${home}</td>
-            <td>${away}</td>
-            <td>${time}</td>
-          </tr>
-        `;
-        tbody.insertAdjacentHTML("beforeend", row);
-      });
-
-      statusDiv.textContent = `Found ${games.length} game(s) for ${formatted}.`;
-    } catch (err) {
-      statusDiv.textContent = `Failed to load games: ${err.message}`;
-      console.error(err);
     }
-  }
 
-  // Initialize with today's date
-  const today = new Date();
-  dateInput.value = formatDate(today);
-  loadGames(today);
+    function addLineupToTable(lineup, team, opponent, opposingPitcher, allPlayers) {
+      const tbody = document.querySelector('#lineupTable tbody');
+      const pitcherName = opposingPitcher ? allPlayers[`ID${opposingPitcher.id}`]?.fullName || 'N/A' : 'N/A';
+      const pitcherThrows = opposingPitcher ? allPlayers[`ID${opposingPitcher.id}`]?.pitchHand?.code || 'N/A' : 'N/A';
 
-  dateInput.addEventListener("change", (e) => {
-    loadGames(e.target.value);
-  });
-</script>
+      lineup.sort((a, b) => parseInt(a.battingOrder) - parseInt(b.battingOrder));
 
+      for (const player of lineup) {
+        const playerInfo = player.person;
+        const position = player.position?.abbreviation || '';
+        const batHand = allPlayers[`ID${playerInfo.id}`]?.batSide?.code || 'N/A';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${team}</td>
+          <td>${opponent}</td>
+          <td>${playerInfo.fullName}</td>
+          <td>${batHand}</td>
+          <td>${position}</td>
+          <td>${pitcherName}</td>
+          <td>${pitcherThrows}</td>
+        `;
+        tbody.appendChild(row);
+      }
+    }
+
+    getGamesAndLineups();
+  </script>
 </body>
 </html>

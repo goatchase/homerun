@@ -13,7 +13,6 @@
     table { border-collapse: collapse; width: 100%; margin-top: 20px; }
     th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
     th { background: #f0f0f0; }
-    .team-label { margin-top: 30px; font-size: 1.1rem; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -23,33 +22,47 @@
   <div id="controls">
     <label for="datePicker">Date:</label>
     <input type="date" id="datePicker" />
-    <button onclick="loadAllLineups()">Load All Lineups</button>
+    <button onclick="loadUnifiedLineups()">Load Lineups</button>
   </div>
 
   <div id="status">Choose a date to begin.</div>
-  <div id="lineups"></div>
+  <table id="lineupTable">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Team</th>
+        <th>Opponent</th>
+        <th>Position</th>
+        <th>Batting Order</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
-    const status = document.getElementById('status');
-    const lineupsDiv = document.getElementById('lineups');
-    const datePicker = document.getElementById('datePicker');
+    const datePicker = document.getElementById("datePicker");
+    const statusDiv = document.getElementById("status");
+    const tbody = document.querySelector("#lineupTable tbody");
 
     // Default to today
     const today = new Date().toISOString().slice(0,10);
     datePicker.value = today;
 
-    async function loadAllLineups() {
+    async function loadUnifiedLineups() {
       const date = datePicker.value;
-      status.textContent = `Loading games for ${date}...`;
-      lineupsDiv.innerHTML = '';
+      statusDiv.textContent = `Loading games for ${date}...`;
+      tbody.innerHTML = '';
 
       try {
         const scheduleRes = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}`);
         const scheduleData = await scheduleRes.json();
         const games = scheduleData.dates?.[0]?.games;
-        if (!games || games.length === 0) throw new Error(`No games found for ${date}.`);
 
-        status.textContent = `Found ${games.length} game(s). Fetching lineups...`;
+        if (!games || games.length === 0) {
+          throw new Error(`No games found for ${date}.`);
+        }
+
+        const allRows = [];
 
         for (const game of games) {
           const gamePk = game.gamePk;
@@ -62,56 +75,49 @@
           const awayName = feed.gameData.teams.away.name;
           const homeName = feed.gameData.teams.home.name;
 
-          if (!away?.battingOrder?.length && !home?.battingOrder?.length) {
-            const noDataDiv = document.createElement('div');
-            noDataDiv.innerHTML = `<div class="team-label">${awayName} @ ${homeName}</div><div><em>No lineups posted yet.</em></div>`;
-            lineupsDiv.appendChild(noDataDiv);
-            continue;
-          }
-
-          const gameHeader = document.createElement('div');
-          gameHeader.className = 'team-label';
-          gameHeader.textContent = `${awayName} @ ${homeName}`;
-          lineupsDiv.appendChild(gameHeader);
-
-          [ ['away', away, awayName], ['home', home, homeName] ].forEach(([side, teamData, teamLabel]) => {
+          const processTeam = (teamData, teamName, opponentName) => {
             if (!teamData?.battingOrder?.length) return;
-
-            const table = document.createElement('table');
-            const titleRow = document.createElement('tr');
-            titleRow.innerHTML = `<th colspan="4">${teamLabel} (${side})</th>`;
-            table.appendChild(titleRow);
-
-            const header = document.createElement('tr');
-            header.innerHTML = '<th>#</th><th>Player</th><th>Pos</th><th>Order</th>';
-            table.appendChild(header);
 
             teamData.battingOrder.forEach(id => {
               const p = teamData.players['ID' + id];
               if (!p) return;
-              const tr = document.createElement('tr');
-              tr.innerHTML = `
-                <td>${p.battingOrder}</td>
-                <td>${p.person.fullName}</td>
-                <td>${p.position?.abbreviation || '–'}</td>
-                <td>${p.battingOrder}</td>
-              `;
-              table.appendChild(tr);
+              allRows.push({
+                name: p.person.fullName,
+                team: teamName,
+                opponent: opponentName,
+                pos: p.position?.abbreviation || "–",
+                order: p.battingOrder
+              });
             });
+          };
 
-            lineupsDiv.appendChild(table);
-          });
+          processTeam(away, awayName, homeName);
+          processTeam(home, homeName, awayName);
         }
 
-        status.textContent = `Lineups loaded for ${date}.`;
+        if (allRows.length === 0) {
+          statusDiv.textContent = "No posted lineups found yet.";
+        } else {
+          statusDiv.textContent = `Loaded ${allRows.length} players from ${games.length} game(s).`;
+          allRows.forEach(row => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${row.name}</td>
+              <td>${row.team}</td>
+              <td>${row.opponent}</td>
+              <td>${row.pos}</td>
+              <td>${row.order}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
       } catch (err) {
         console.error(err);
-        status.textContent = `Error loading data: ${err.message}`;
+        statusDiv.textContent = `Error loading data: ${err.message}`;
       }
     }
 
-    // Load today's by default
-    loadAllLineups();
+    loadUnifiedLineups(); // Load today on page load
   </script>
 
 </body>

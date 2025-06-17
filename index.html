@@ -2,222 +2,147 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MLB Lineups Viewer</title>
+  <title>MLB Lineup Viewer</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
-      background: #fefefe;
-      color: #222;
-    }
-    h1 {
-      margin-bottom: 10px;
-    }
-    #status {
-      margin-bottom: 20px;
-      font-style: italic;
-      color: #555;
     }
     table {
       border-collapse: collapse;
       width: 100%;
-      max-width: 900px;
-      margin-bottom: 30px;
+      margin-top: 10px;
     }
     th, td {
       border: 1px solid #ccc;
-      padding: 8px 12px;
+      padding: 6px 8px;
       text-align: left;
     }
     th {
       background: #eee;
-      cursor: pointer;
-      user-select: none;
     }
-    tr:nth-child(even) {
-      background: #fafafa;
+    h1 {
+      margin-bottom: 0;
     }
     .team-header {
-      font-weight: bold;
       background: #ddd;
-      text-align: center;
+      font-weight: bold;
     }
-    #game-select {
-      margin-bottom: 20px;
-      font-size: 1rem;
-      padding: 6px 8px;
+    #controls {
+      margin-top: 10px;
+    }
+    button {
+      margin-left: 10px;
     }
   </style>
 </head>
 <body>
 
-<h1>MLB Lineups Viewer</h1>
+<h1>MLB Lineup Viewer</h1>
+<div id="controls">
+  <label for="date">Select Date:</label>
+  <input type="date" id="date" />
+  <select id="game-select"></select>
+  <button onclick="fetchSchedule()">Load Games</button>
+</div>
 
-<div id="status">Loading today's games...</div>
-
-<label for="game-select">Select a game:</label>
-<select id="game-select"></select>
-
-<div id="lineups-container"></div>
+<div id="status" style="margin-top: 10px;">Select a date to load games.</div>
+<div id="lineups"></div>
 
 <script>
-  const statusDiv = document.getElementById('status');
-  const gameSelect = document.getElementById('game-select');
-  const lineupsContainer = document.getElementById('lineups-container');
+  const status = document.getElementById("status");
+  const select = document.getElementById("game-select");
+  const container = document.getElementById("lineups");
+  const dateInput = document.getElementById("date");
 
-  // Helper: format position codes to readable names
-  const positionMap = {
-    "P": "Pitcher",
-    "C": "Catcher",
-    "1B": "First Base",
-    "2B": "Second Base",
-    "3B": "Third Base",
-    "SS": "Shortstop",
-    "LF": "Left Field",
-    "CF": "Center Field",
-    "RF": "Right Field",
-    "DH": "Designated Hitter",
-    "PH": "Pinch Hitter",
-    "PR": "Pinch Runner"
-  };
+  // Set default date to today
+  const today = new Date().toISOString().slice(0, 10);
+  dateInput.value = today;
 
-  function formatDate(dateStr) {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'});
-  }
+  select.onchange = () => loadLineups(select.value);
 
-  // Fetch schedule for today
   async function fetchSchedule() {
-    statusDiv.textContent = "Loading today's games...";
-    const dateStr = new Date().toISOString().slice(0,10); // YYYY-MM-DD
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}`;
+    const selectedDate = dateInput.value;
+    status.textContent = `Loading games for ${selectedDate}...`;
+    container.innerHTML = "";
+    select.innerHTML = "";
 
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${selectedDate}`;
     try {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      if (!data.dates || data.dates.length === 0) {
-        statusDiv.textContent = "No MLB games scheduled for today.";
-        return;
+      if (!data.dates?.length || data.dates[0].games.length === 0) {
+        throw new Error("No games scheduled for this date.");
       }
 
       const games = data.dates[0].games;
-      statusDiv.textContent = `Found ${games.length} game(s) on ${formatDate(dateStr)}. Select a game to view lineups.`;
+      status.textContent = `Found ${games.length} game(s) on ${selectedDate}.`;
 
-      populateGameSelect(games);
+      select.innerHTML = games.map(g => {
+        const home = g.teams.home.team.name;
+        const away = g.teams.away.team.name;
+        return `<option value="${g.gamePk}">${away} @ ${home}</option>`;
+      }).join("");
 
-      // Automatically load first game's lineups
-      if (games.length > 0) {
-        loadLineups(games[0].gamePk);
-      }
-
+      // Auto-load first game's lineups
+      if (games.length > 0) loadLineups(games[0].gamePk);
     } catch (err) {
-      statusDiv.textContent = `Failed to load schedule: ${err.message}`;
-      console.error(err);
+      status.textContent = `Schedule error: ${err.message}`;
     }
   }
 
-  // Populate the dropdown with games
-  function populateGameSelect(games) {
-    gameSelect.innerHTML = "";
-    games.forEach(game => {
-      const option = document.createElement('option');
-      const home = game.teams.home.team.name;
-      const away = game.teams.away.team.name;
-      option.value = game.gamePk;
-      option.textContent = `${away} @ ${home} (${game.status.detailedState})`;
-      gameSelect.appendChild(option);
-    });
-  }
-
-  // Fetch and display lineups for a selected game
   async function loadLineups(gamePk) {
-    statusDiv.textContent = "Loading lineups...";
-    lineupsContainer.innerHTML = "";
-
-    const boxscoreUrl = `https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`;
+    status.textContent = "Loading lineups...";
+    container.innerHTML = "";
 
     try {
-      const res = await fetch(boxscoreUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
       const data = await res.json();
+      console.log("Boxscore data:", data);
 
-      // Extract team lineups
-      const homeTeam = data.teams.home;
-      const awayTeam = data.teams.away;
+      const home = data.teams.home;
+      const away = data.teams.away;
 
-      displayTeamLineup(awayTeam, "Away Team");
-      displayTeamLineup(homeTeam, "Home Team");
+      if (!home.lineupOrder?.length && !away.lineupOrder?.length) {
+        status.textContent = "Lineups not yet posted. Click Refresh below.";
+        container.innerHTML = `<button onclick="loadLineups(${gamePk})">🔁 Refresh Lineups</button>`;
+        return;
+      }
 
-      statusDiv.textContent = "Lineups loaded.";
+      status.textContent = "Lineups loaded!";
+      ["away", "home"].forEach(teamKey => {
+        const team = data.teams[teamKey];
+        const title = team.team.name + (teamKey === "home" ? " (Home)" : " (Away)");
+        const table = document.createElement("table");
+
+        const headerRow = document.createElement("tr");
+        headerRow.innerHTML = `<th colspan="3">${title}</th>`;
+        table.appendChild(headerRow);
+
+        const labelRow = document.createElement("tr");
+        labelRow.innerHTML = `<th>#</th><th>Position</th><th>Name</th>`;
+        table.appendChild(labelRow);
+
+        team.lineupOrder?.forEach((id, idx) => {
+          const player = team.players["ID" + id];
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td>${player.position?.abbreviation ?? "–"}</td>
+            <td>${player.person.fullName}</td>`;
+          table.appendChild(tr);
+        });
+
+        container.appendChild(table);
+      });
     } catch (err) {
-      statusDiv.textContent = `Failed to load lineups: ${err.message}`;
+      status.textContent = `Lineup error: ${err.message}`;
       console.error(err);
     }
   }
 
-  // Render lineup table for a team
-  function displayTeamLineup(teamData, label) {
-    const teamName = teamData.team.name;
-    const players = teamData.players;
-
-    const container = document.createElement('div');
-    container.style.marginBottom = '30px';
-
-    const heading = document.createElement('h2');
-    heading.textContent = `${teamName} (${label})`;
-    container.appendChild(heading);
-
-    const table = document.createElement('table');
-    const thead = document.createElement('thead');
-    thead.innerHTML = `
-      <tr>
-        <th>Batting Order</th>
-        <th>Position</th>
-        <th>Player Name</th>
-        <th>Jersey Number</th>
-      </tr>`;
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-
-    // Get lineup order and details
-    // teamData.lineupOrder is array of player IDs in batting order (string keys like "ID123")
-    const lineupOrder = teamData.lineupOrder;
-    lineupOrder.forEach((playerId, index) => {
-      const playerKey = `ID${playerId}`;
-      const player = players[playerKey];
-      if (!player) return;
-
-      const positionCode = player.position?.code || "–";
-      const positionName = positionMap[positionCode] || positionCode;
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="text-align:center;">${index + 1}</td>
-        <td>${positionName}</td>
-        <td>${player.person.fullName}</td>
-        <td style="text-align:center;">${player.jerseyNumber || "–"}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    table.appendChild(tbody);
-    container.appendChild(table);
-    lineupsContainer.appendChild(container);
-  }
-
-  // When user changes game selection
-  gameSelect.addEventListener('change', () => {
-    const gamePk = parseInt(gameSelect.value);
-    if (gamePk) {
-      loadLineups(gamePk);
-    }
-  });
-
-  // Start by fetching today's schedule
+  // Auto-load today's games on page load
   fetchSchedule();
 </script>
 

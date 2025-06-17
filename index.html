@@ -14,31 +14,34 @@
     h1 {
       margin-bottom: 10px;
     }
+    #controls {
+      margin-bottom: 15px;
+    }
+    select, button {
+      font-size: 10pt;
+      padding: 4px 8px;
+    }
     table {
       border-collapse: collapse;
       width: 100%;
       background: white;
+      table-layout: fixed;
     }
     thead th {
-      position: sticky;
-      top: 0;
       background: #f0f0f0;
       border-bottom: 2px solid #ccc;
       padding: 6px 8px;
       text-align: left;
     }
-    tbody tr {
-      border-bottom: 1px solid #ddd;
-    }
     th, td {
       padding: 6px 8px;
-      white-space: nowrap;
       overflow: hidden;
+      white-space: nowrap;
       text-overflow: ellipsis;
+      border-bottom: 1px solid #ddd;
     }
-    .text-right {
-      text-align: right;
-    }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
     #status {
       margin-top: 10px;
       font-style: italic;
@@ -49,94 +52,94 @@
 <body>
 
   <h1>MLB Home Run Predictor</h1>
-  <div id="status">Loading lineups...</div>
+  <div id="controls">
+    <label for="date">Select a date:</label>
+    <input type="date" id="date" value="2023-06-01" />
+    <button onclick="fetchLineups()">Load Lineups</button>
+  </div>
+
+  <div id="status">Choose a date and click "Load Lineups".</div>
 
   <table id="lineup-table" aria-label="MLB Lineups Table">
     <thead>
       <tr>
-        <th>Batter Name</th>
+        <th>Batter</th>
         <th>Team</th>
         <th>Opponent</th>
-        <th>Position</th>
-        <th>Opposing Pitcher</th>
+        <th>Pitcher</th>
         <th>Ballpark</th>
-        <th class="text-right">Temperature</th>
+        <th class="text-right">Temp</th>
         <th>Wind</th>
         <th class="text-right">Humidity</th>
+        <th class="text-right">Batter HR/PA</th>
+        <th class="text-right">Pitcher HR/PA</th>
+        <th class="text-right">PA Since Last HR</th>
+        <th class="text-right">DK Odds</th>
       </tr>
     </thead>
-    <tbody>
-      <!-- Data will be inserted here -->
-    </tbody>
+    <tbody></tbody>
   </table>
 
-  <script>
-    const API_KEY = "efac23180b2f43259ccbe52c75da0a0c"; // your SportsDataIO key
-    const PROXY_URL = "http://localhost:8080/"; // your local proxy
-    const tbody = document.querySelector("#lineup-table tbody");
-    const statusDiv = document.getElementById("status");
+<script>
+const API_KEY = "efac23180b2f43259ccbe52c75da0a0c";
+const PROXY_URL = "http://localhost:8080/";
+const statusDiv = document.getElementById("status");
+const tbody = document.querySelector("tbody");
 
-    function getTodayDate() {
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
+function formatNumber(num, digits=3) {
+  return (num === null || num === undefined) ? "–" : Number(num).toFixed(digits);
+}
+
+async function fetchLineups() {
+  const date = document.getElementById("date").value;
+  const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
+
+  statusDiv.textContent = `Loading lineups for ${date}...`;
+  tbody.innerHTML = "";
+
+  try {
+    const res = await fetch(apiUrl, {
+      headers: { "Ocp-Apim-Subscription-Key": API_KEY }
+    });
+
+    if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const data = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      statusDiv.textContent = `No data for ${date}.`;
+      return;
     }
 
-    async function fetchLineupsForToday() {
-      const date = getTodayDate();
-      const apiUrl = `${PROXY_URL}https://api.sportsdata.io/v3/mlb/scores/json/StartingLineupsByDate/${date}`;
+    statusDiv.textContent = `Showing ${data.length} lineups for ${date}.`;
+    insertRows(data);
+  } catch (err) {
+    statusDiv.textContent = `Error: ${err.message}`;
+    console.error(err);
+  }
+}
 
-      statusDiv.textContent = `Loading lineups for ${date}...`;
+function insertRows(data) {
+  tbody.innerHTML = "";
+  data.forEach(item => {
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="text-left">${item.Name ?? "–"}</td>
+        <td class="text-left">${item.Team ?? "–"}</td>
+        <td class="text-left">${item.Opponent ?? "–"}</td>
+        <td class="text-left">${item.OpposingPitcher ?? "–"}</td>
+        <td class="text-left">${item.Ballpark ?? "–"}</td>
+        <td class="text-right">${item.Temperature ?? "–"}</td>
+        <td class="text-left">${item.Wind ?? "–"}</td>
+        <td class="text-right">${item.Humidity ?? "–"}</td>
+        <td class="text-right">${formatNumber(item.BatterHRPA)}</td>
+        <td class="text-right">${formatNumber(item.PitcherHRPA)}</td>
+        <td class="text-right">${item.PASinceLastHR ?? "–"}</td>
+        <td class="text-right">${formatNumber(item.DraftKingsOdds, 2)}</td>
+      </tr>
+    `);
+  });
+}
+</script>
 
-      try {
-        const res = await fetch(apiUrl, {
-          headers: { "Ocp-Apim-Subscription-Key": API_KEY }
-        });
-
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status} ${res.statusText}`);
-        }
-
-        const data = await res.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-          statusDiv.textContent = `No lineup data available for ${date}.`;
-          tbody.innerHTML = "";
-          return;
-        }
-
-        statusDiv.textContent = `Showing ${data.length} lineup entries for ${date}.`;
-        insertRows(data);
-
-      } catch (err) {
-        statusDiv.textContent = `Failed to load lineups: ${err.message}`;
-        console.error(err);
-        tbody.innerHTML = "";
-      }
-    }
-
-    function insertRows(data) {
-      tbody.innerHTML = "";
-      data.forEach(item => {
-        tbody.insertAdjacentHTML("beforeend", `
-          <tr>
-            <td>${item.Name || "–"}</td>
-            <td>${item.Team || "–"}</td>
-            <td>${item.Opponent || "–"}</td>
-            <td>${item.Position || "–"}</td>
-            <td>${item.OpposingPitcher || "–"}</td>
-            <td>${item.Ballpark || "–"}</td>
-            <td class="text-right">${item.Temperature ?? "–"}</td>
-            <td>${item.Wind || "–"}</td>
-            <td class="text-right">${item.Humidity ?? "–"}</td>
-          </tr>
-        `);
-      });
-    }
-
-    fetchLineupsForToday();
-  </script>
 </body>
 </html>

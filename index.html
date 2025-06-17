@@ -2,126 +2,224 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>MLB Daily Lineups</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MLB Lineups Viewer</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
-      background: #f9f9f9;
+      background: #fefefe;
+      color: #222;
     }
     h1 {
-      margin-bottom: 15px;
+      margin-bottom: 10px;
+    }
+    #status {
+      margin-bottom: 20px;
+      font-style: italic;
+      color: #555;
     }
     table {
       border-collapse: collapse;
       width: 100%;
-      background: white;
-      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+      max-width: 900px;
+      margin-bottom: 30px;
     }
     th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
+      border: 1px solid #ccc;
+      padding: 8px 12px;
       text-align: left;
-      font-size: 14px;
     }
     th {
-      background-color: #0074D9;
-      color: white;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      background: #eee;
+      cursor: pointer;
+      user-select: none;
     }
-    tbody tr:hover {
-      background-color: #f1f1f1;
+    tr:nth-child(even) {
+      background: #fafafa;
     }
-    #status {
-      margin-bottom: 10px;
-      font-style: italic;
-      color: #555;
+    .team-header {
+      font-weight: bold;
+      background: #ddd;
+      text-align: center;
+    }
+    #game-select {
+      margin-bottom: 20px;
+      font-size: 1rem;
+      padding: 6px 8px;
     }
   </style>
 </head>
 <body>
 
-  <h1>MLB Daily Lineups</h1>
-  <div id="status">Loading lineups...</div>
+<h1>MLB Lineups Viewer</h1>
 
-  <table aria-label="MLB Lineups Table">
-    <thead>
-      <tr>
-        <th>Team</th>
-        <th>Opponent</th>
-        <th>Batter</th>
-        <th>Position</th>
-        <th>Starting Pitcher</th>
-      </tr>
-    </thead>
-    <tbody id="lineups-body">
-      <!-- Lineup rows will be inserted here -->
-    </tbody>
-  </table>
+<div id="status">Loading today's games...</div>
 
-  <script>
-    const statusDiv = document.getElementById('status');
-    const tbody = document.getElementById('lineups-body');
+<label for="game-select">Select a game:</label>
+<select id="game-select"></select>
 
-    async function fetchLineups() {
-      statusDiv.textContent = "Loading lineups...";
-      try {
-        const res = await fetch('https://dailymlblineups.com/api/lineups');
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        const games = await res.json();
+<div id="lineups-container"></div>
 
-        if (!games.length) {
-          statusDiv.textContent = "No lineup data available today.";
-          return;
-        }
+<script>
+  const statusDiv = document.getElementById('status');
+  const gameSelect = document.getElementById('game-select');
+  const lineupsContainer = document.getElementById('lineups-container');
 
-        statusDiv.textContent = `Loaded ${games.length} games.`;
+  // Helper: format position codes to readable names
+  const positionMap = {
+    "P": "Pitcher",
+    "C": "Catcher",
+    "1B": "First Base",
+    "2B": "Second Base",
+    "3B": "Third Base",
+    "SS": "Shortstop",
+    "LF": "Left Field",
+    "CF": "Center Field",
+    "RF": "Right Field",
+    "DH": "Designated Hitter",
+    "PH": "Pinch Hitter",
+    "PR": "Pinch Runner"
+  };
 
-        tbody.innerHTML = '';
+  function formatDate(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'});
+  }
 
-        games.forEach(game => {
-          const homeTeam = game.homeTeam;
-          const awayTeam = game.awayTeam;
-          const homeSP = game.homeStartingPitcher;
-          const awaySP = game.awayStartingPitcher;
+  // Fetch schedule for today
+  async function fetchSchedule() {
+    statusDiv.textContent = "Loading today's games...";
+    const dateStr = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}`;
 
-          // Add home team batters
-          game.homeLineup.forEach(batter => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${homeTeam}</td>
-              <td>${awayTeam}</td>
-              <td>${batter.name}</td>
-              <td>${batter.position}</td>
-              <td>${homeSP}</td>
-            `;
-            tbody.appendChild(tr);
-          });
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
 
-          // Add away team batters
-          game.awayLineup.forEach(batter => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${awayTeam}</td>
-              <td>${homeTeam}</td>
-              <td>${batter.name}</td>
-              <td>${batter.position}</td>
-              <td>${awaySP}</td>
-            `;
-            tbody.appendChild(tr);
-          });
-        });
-
-      } catch (err) {
-        statusDiv.textContent = "Failed to load lineups.";
-        console.error("Error fetching lineups:", err);
+      if (!data.dates || data.dates.length === 0) {
+        statusDiv.textContent = "No MLB games scheduled for today.";
+        return;
       }
-    }
 
-    fetchLineups();
-  </script>
+      const games = data.dates[0].games;
+      statusDiv.textContent = `Found ${games.length} game(s) on ${formatDate(dateStr)}. Select a game to view lineups.`;
+
+      populateGameSelect(games);
+
+      // Automatically load first game's lineups
+      if (games.length > 0) {
+        loadLineups(games[0].gamePk);
+      }
+
+    } catch (err) {
+      statusDiv.textContent = `Failed to load schedule: ${err.message}`;
+      console.error(err);
+    }
+  }
+
+  // Populate the dropdown with games
+  function populateGameSelect(games) {
+    gameSelect.innerHTML = "";
+    games.forEach(game => {
+      const option = document.createElement('option');
+      const home = game.teams.home.team.name;
+      const away = game.teams.away.team.name;
+      option.value = game.gamePk;
+      option.textContent = `${away} @ ${home} (${game.status.detailedState})`;
+      gameSelect.appendChild(option);
+    });
+  }
+
+  // Fetch and display lineups for a selected game
+  async function loadLineups(gamePk) {
+    statusDiv.textContent = "Loading lineups...";
+    lineupsContainer.innerHTML = "";
+
+    const boxscoreUrl = `https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`;
+
+    try {
+      const res = await fetch(boxscoreUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      // Extract team lineups
+      const homeTeam = data.teams.home;
+      const awayTeam = data.teams.away;
+
+      displayTeamLineup(awayTeam, "Away Team");
+      displayTeamLineup(homeTeam, "Home Team");
+
+      statusDiv.textContent = "Lineups loaded.";
+    } catch (err) {
+      statusDiv.textContent = `Failed to load lineups: ${err.message}`;
+      console.error(err);
+    }
+  }
+
+  // Render lineup table for a team
+  function displayTeamLineup(teamData, label) {
+    const teamName = teamData.team.name;
+    const players = teamData.players;
+
+    const container = document.createElement('div');
+    container.style.marginBottom = '30px';
+
+    const heading = document.createElement('h2');
+    heading.textContent = `${teamName} (${label})`;
+    container.appendChild(heading);
+
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr>
+        <th>Batting Order</th>
+        <th>Position</th>
+        <th>Player Name</th>
+        <th>Jersey Number</th>
+      </tr>`;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+
+    // Get lineup order and details
+    // teamData.lineupOrder is array of player IDs in batting order (string keys like "ID123")
+    const lineupOrder = teamData.lineupOrder;
+    lineupOrder.forEach((playerId, index) => {
+      const playerKey = `ID${playerId}`;
+      const player = players[playerKey];
+      if (!player) return;
+
+      const positionCode = player.position?.code || "–";
+      const positionName = positionMap[positionCode] || positionCode;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="text-align:center;">${index + 1}</td>
+        <td>${positionName}</td>
+        <td>${player.person.fullName}</td>
+        <td style="text-align:center;">${player.jerseyNumber || "–"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    container.appendChild(table);
+    lineupsContainer.appendChild(container);
+  }
+
+  // When user changes game selection
+  gameSelect.addEventListener('change', () => {
+    const gamePk = parseInt(gameSelect.value);
+    if (gamePk) {
+      loadLineups(gamePk);
+    }
+  });
+
+  // Start by fetching today's schedule
+  fetchSchedule();
+</script>
 
 </body>
 </html>
